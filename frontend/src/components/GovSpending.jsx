@@ -20,11 +20,23 @@ export default function GovSpending({ symbol, companyName }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
+  const [dots, setDots]       = useState('');
+
+  // Animated dots for slow loading indicator
+  useEffect(() => {
+    if (!loading) return;
+    const interval = setInterval(() => {
+      setDots(d => d.length >= 3 ? '' : d + '.');
+    }, 500);
+    return () => clearInterval(interval);
+  }, [loading]);
 
   useEffect(() => {
     if (!companyName) return;
     setLoading(true);
     setError(null);
+    setData(null);
+
     fetch(`${API}/api/gov-spending?company=${encodeURIComponent(companyName)}`)
       .then(r => r.json())
       .then(d => {
@@ -32,21 +44,43 @@ export default function GovSpending({ symbol, companyName }) {
         setData(d);
         setLoading(false);
       })
-      .catch(e => { setError(e.message); setLoading(false); });
+      .catch(e => {
+        setError(e.message);
+        setLoading(false);
+      });
   }, [companyName]);
 
-  if (!companyName) return null;
-  if (loading) return <Card><Loader text="Searching federal contracts…" /></Card>;
+  // Show loading with slow-API warning
+  if (loading) {
+    return (
+      <Card>
+        <div style={styles.loadingRow}>
+          <p style={styles.sectionLabel}>USA GOVERNMENT SPENDING</p>
+          <p style={styles.loadingText}>
+            Searching federal contracts{dots}
+            <span style={styles.loadingNote}> (may take 10–20s)</span>
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
   if (error || !data || data.totalContracts === 0) return null;
 
-  const { totalAmount, totalContracts, agencies, recentAwards, yearOverYear } = data;
+  const { totalAmount, totalContracts, searchTerm, agencies,
+          recentAwards, yearOverYear } = data;
 
   const maxAgencyAmt = Math.max(...(agencies?.map(a => a.amount) || [1]));
 
   return (
     <Card>
       <div style={styles.header}>
-        <p style={styles.sectionLabel}>USA GOVERNMENT SPENDING</p>
+        <div>
+          <p style={styles.sectionLabel}>USA GOVERNMENT SPENDING</p>
+          {searchTerm && (
+            <p style={styles.searchTerm}>searched: "{searchTerm}"</p>
+          )}
+        </div>
         <a
           href={`https://www.usaspending.gov/search/?query=${encodeURIComponent(companyName)}`}
           target="_blank"
@@ -57,35 +91,31 @@ export default function GovSpending({ symbol, companyName }) {
         </a>
       </div>
 
-      {/* Top summary */}
+      {/* Summary grid */}
       <div style={styles.summaryGrid}>
-        <div style={styles.summaryItem}>
-          <span style={styles.summaryLabel}>Total contracts (12mo)</span>
-          <span style={styles.summaryValue}>{fmtDollars(totalAmount)}</span>
-        </div>
-        <div style={styles.summaryItem}>
-          <span style={styles.summaryLabel}>Number of awards</span>
-          <span style={styles.summaryValue}>{totalContracts?.toLocaleString()}</span>
-        </div>
-        <div style={styles.summaryItem}>
-          <span style={styles.summaryLabel}>Avg award size</span>
-          <span style={styles.summaryValue}>
-            {fmtDollars(totalContracts > 0 ? totalAmount / totalContracts : 0)}
-          </span>
-        </div>
+        {[
+          { label: 'Total contracts (FY)',  value: fmtDollars(totalAmount) },
+          { label: 'Number of awards',      value: totalContracts?.toLocaleString() },
+          { label: 'Avg award size',        value: fmtDollars(totalContracts > 0 ? totalAmount / totalContracts : 0) },
+        ].map(({ label, value }) => (
+          <div key={label} style={styles.summaryItem}>
+            <span style={styles.summaryLabel}>{label}</span>
+            <span style={styles.summaryValue}>{value}</span>
+          </div>
+        ))}
       </div>
 
       {/* Year over year */}
-      {yearOverYear && yearOverYear.length > 0 && (
+      {yearOverYear?.filter(y => y.amount > 0).length > 0 && (
         <div style={styles.section}>
           <p style={styles.subLabel}>ANNUAL CONTRACT VALUE</p>
           <div style={styles.yoyBars}>
             {yearOverYear.map((y, i) => {
-              const maxY = Math.max(...yearOverYear.map(x => x.amount));
-              const pct  = maxY > 0 ? (y.amount / maxY) * 100 : 0;
+              const maxY = Math.max(...yearOverYear.map(x => x.amount), 1);
+              const pct  = (y.amount / maxY) * 100;
               return (
                 <div key={i} style={styles.yoyRow}>
-                  <span style={styles.yoyYear}>{y.year}</span>
+                  <span style={styles.yoyYear}>FY{y.year}</span>
                   <div style={styles.yoyTrack}>
                     <div style={{
                       ...styles.yoyFill,
@@ -106,13 +136,13 @@ export default function GovSpending({ symbol, companyName }) {
         </div>
       )}
 
-      {/* Agencies breakdown */}
-      {agencies && agencies.length > 0 && (
+      {/* Agency breakdown */}
+      {agencies?.length > 0 && (
         <div style={styles.section}>
           <p style={styles.subLabel}>TOP CONTRACTING AGENCIES</p>
           <div style={styles.agencyList}>
             {agencies.slice(0, 6).map((a, i) => {
-              const pct = maxAgencyAmt > 0 ? (a.amount / maxAgencyAmt) * 100 : 0;
+              const pct   = (a.amount / maxAgencyAmt) * 100;
               const color = agencyColor(i);
               return (
                 <div key={i} style={styles.agencyRow}>
@@ -121,11 +151,7 @@ export default function GovSpending({ symbol, companyName }) {
                     <span style={styles.agencyAmt}>{fmtDollars(a.amount)}</span>
                   </div>
                   <div style={styles.agencyTrack}>
-                    <div style={{
-                      ...styles.agencyFill,
-                      width: `${pct}%`,
-                      background: color,
-                    }} />
+                    <div style={{ ...styles.agencyFill, width: `${pct}%`, background: color }} />
                   </div>
                 </div>
               );
@@ -135,7 +161,7 @@ export default function GovSpending({ symbol, companyName }) {
       )}
 
       {/* Recent awards */}
-      {recentAwards && recentAwards.length > 0 && (
+      {recentAwards?.length > 0 && (
         <div style={styles.section}>
           <p style={styles.subLabel}>RECENT AWARDS</p>
           <div style={styles.awardsList}>
@@ -171,206 +197,48 @@ function Card({ children }) {
   );
 }
 
-function Loader({ text }) {
-  return (
-    <div style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
-      {text}
-    </div>
-  );
-}
-
 const styles = {
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '1.25rem',
-  },
-  sectionLabel: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.65rem',
-    letterSpacing: '0.12em',
-    color: 'var(--muted)',
-  },
+  loadingRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  loadingText: { fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--muted)' },
+  loadingNote: { fontSize: '0.65rem', opacity: 0.6 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' },
+  sectionLabel: { fontFamily: 'var(--font-mono)', fontSize: '0.65rem', letterSpacing: '0.12em', color: 'var(--muted)' },
+  searchTerm: { fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--muted)', opacity: 0.6, marginTop: 2 },
   sourceLink: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.68rem',
-    color: 'var(--accent)',
-    textDecoration: 'none',
-    border: '1px solid rgba(0,212,160,0.25)',
-    padding: '3px 9px',
-    borderRadius: 5,
+    fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--accent)',
+    textDecoration: 'none', border: '1px solid rgba(0,212,160,0.25)',
+    padding: '3px 9px', borderRadius: 5, flexShrink: 0,
   },
   summaryGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: '1px',
-    background: 'var(--border)',
-    border: '1px solid var(--border)',
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: '1.25rem',
+    display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '1px', background: 'var(--border)',
+    border: '1px solid var(--border)', borderRadius: 8,
+    overflow: 'hidden', marginBottom: '1.25rem',
   },
-  summaryItem: {
-    background: 'var(--surface2)',
-    padding: '0.75rem 0.9rem',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-  },
-  summaryLabel: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.62rem',
-    color: 'var(--muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  summaryValue: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '1.05rem',
-    fontWeight: 600,
-    color: 'var(--text)',
-  },
-  section: {
-    marginBottom: '1.25rem',
-  },
-  subLabel: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.62rem',
-    letterSpacing: '0.1em',
-    color: 'var(--muted)',
-    marginBottom: '0.65rem',
-  },
-  yoyBars: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.4rem',
-  },
-  yoyRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-  },
-  yoyYear: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.72rem',
-    color: 'var(--text2)',
-    width: 36,
-    flexShrink: 0,
-  },
-  yoyTrack: {
-    flex: 1,
-    height: 6,
-    background: 'var(--border2)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  yoyFill: {
-    height: '100%',
-    borderRadius: 3,
-    transition: 'width 0.5s ease',
-  },
-  yoyAmt: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.75rem',
-    width: 70,
-    textAlign: 'right',
-    flexShrink: 0,
-  },
-  agencyList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.65rem',
-  },
-  agencyRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-  },
-  agencyTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-  },
-  agencyName: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.75rem',
-    fontWeight: 500,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    flex: 1,
-    paddingRight: '1rem',
-  },
-  agencyAmt: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.75rem',
-    color: 'var(--text2)',
-    flexShrink: 0,
-  },
-  agencyTrack: {
-    height: 4,
-    background: 'var(--border2)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  agencyFill: {
-    height: '100%',
-    borderRadius: 2,
-    opacity: 0.7,
-    transition: 'width 0.5s ease',
-  },
-  awardsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    border: '1px solid var(--border)',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  awardRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0.65rem 0.9rem',
-    borderBottom: '1px solid var(--border)',
-    gap: '1rem',
-    background: 'var(--surface2)',
-  },
-  awardLeft: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 3,
-    flex: 1,
-    minWidth: 0,
-  },
-  awardDesc: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.75rem',
-    color: 'var(--text)',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  awardAgency: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.65rem',
-    color: 'var(--muted)',
-  },
-  awardRight: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 3,
-    flexShrink: 0,
-  },
-  awardAmt: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.82rem',
-    fontWeight: 600,
-    color: 'var(--accent)',
-  },
-  awardDate: {
-    fontFamily: 'var(--font-mono)',
-    fontSize: '0.65rem',
-    color: 'var(--muted)',
-  },
+  summaryItem: { background: 'var(--surface2)', padding: '0.75rem 0.9rem', display: 'flex', flexDirection: 'column', gap: 4 },
+  summaryLabel: { fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  summaryValue: { fontFamily: 'var(--font-mono)', fontSize: '1.05rem', fontWeight: 600, color: 'var(--text)' },
+  section: { marginBottom: '1.25rem' },
+  subLabel: { fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '0.65rem' },
+  yoyBars: { display: 'flex', flexDirection: 'column', gap: '0.4rem' },
+  yoyRow: { display: 'flex', alignItems: 'center', gap: '0.75rem' },
+  yoyYear: { fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text2)', width: 44, flexShrink: 0 },
+  yoyTrack: { flex: 1, height: 6, background: 'var(--border2)', borderRadius: 3, overflow: 'hidden' },
+  yoyFill: { height: '100%', borderRadius: 3, transition: 'width 0.5s ease' },
+  yoyAmt: { fontFamily: 'var(--font-mono)', fontSize: '0.75rem', width: 70, textAlign: 'right', flexShrink: 0 },
+  agencyList: { display: 'flex', flexDirection: 'column', gap: '0.65rem' },
+  agencyRow: { display: 'flex', flexDirection: 'column', gap: 4 },
+  agencyTop: { display: 'flex', justifyContent: 'space-between' },
+  agencyName: { fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, paddingRight: '1rem' },
+  agencyAmt: { fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text2)', flexShrink: 0 },
+  agencyTrack: { height: 4, background: 'var(--border2)', borderRadius: 2, overflow: 'hidden' },
+  agencyFill: { height: '100%', borderRadius: 2, opacity: 0.75, transition: 'width 0.5s ease' },
+  awardsList: { display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' },
+  awardRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.65rem 0.9rem', borderBottom: '1px solid var(--border)', gap: '1rem', background: 'var(--surface2)' },
+  awardLeft: { display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0 },
+  awardDesc: { fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  awardAgency: { fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)' },
+  awardRight: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 },
+  awardAmt: { fontFamily: 'var(--font-mono)', fontSize: '0.82rem', fontWeight: 600, color: 'var(--accent)' },
+  awardDate: { fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)' },
 };
