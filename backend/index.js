@@ -525,9 +525,10 @@ app.get('/api/stocktwits', async (req, res) => {
 });
 
 
-// ── ESG Score (Yahoo Finance / Sustainalytics) ────────────────────────────────
+
+// ── ESG Score (Yahoo Finance / Sustainalytics via yahoo-finance2) ─────────────
 // GET /api/esg?symbol=AAPL
-// Uses Yahoo Finance quoteSummary esgScores module — free, no key needed
+// Uses yahoo-finance2 npm package which handles Yahoo auth properly
 app.get('/api/esg', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
@@ -538,78 +539,66 @@ app.get('/api/esg', async (req, res) => {
   try {
     const sym = symbol.toUpperCase();
 
-    const response = await axios.get(
-      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}`,
-      {
-        params: { modules: 'esgScores' },
-        timeout: 10000,
-        headers: {
-          'User-Agent':  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept':      'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer':     'https://finance.yahoo.com/',
-        },
-      }
-    );
+    // Dynamically import yahoo-finance2 (ESM compatible)
+    const yf = (await import('yahoo-finance2')).default;
 
-    const esg = response.data?.quoteSummary?.result?.[0]?.esgScores;
+    const result = await yf.quoteSummary(sym, {
+      modules: ['esgScores'],
+    });
 
-    if (!esg) {
+    const esg = result?.esgScores;
+
+    if (!esg || Object.keys(esg).length === 0) {
       return res.json({ error: 'no_data' });
     }
 
-    // ratingYear + ratingMonth give us the last updated date
     const lastUpdated = esg.ratingYear && esg.ratingMonth
       ? `${esg.ratingMonth}/${esg.ratingYear}`
       : null;
 
-    // Controversy levels 0-5 (0 = none, 5 = severe)
     const controversyMap = {
-      0: 'None', 1: 'Low', 2: 'Moderate', 3: 'Significant', 4: 'High', 5: 'Severe',
+      0: 'None', 1: 'Low', 2: 'Moderate',
+      3: 'Significant', 4: 'High', 5: 'Severe',
     };
 
-    const result = {
-      totalScore:           esg.totalEsg?.raw          ?? null,
-      environmentScore:     esg.environmentScore?.raw  ?? null,
-      socialScore:          esg.socialScore?.raw        ?? null,
-      governanceScore:      esg.governanceScore?.raw    ?? null,
-      // Risk level derived from total score (lower = less risk on Sustainalytics scale)
-      riskLevel:            esg.totalEsg?.raw != null
-        ? esg.totalEsg.raw < 10  ? 'Negligible'
-        : esg.totalEsg.raw < 20  ? 'Low'
-        : esg.totalEsg.raw < 30  ? 'Medium'
-        : esg.totalEsg.raw < 40  ? 'High'
-        : 'Severe'
+    const data = {
+      totalScore:           esg.totalEsg          ?? null,
+      environmentScore:     esg.environmentScore  ?? null,
+      socialScore:          esg.socialScore       ?? null,
+      governanceScore:      esg.governanceScore   ?? null,
+      riskLevel:            esg.totalEsg != null
+        ? esg.totalEsg < 10 ? 'Negligible Risk'
+        : esg.totalEsg < 20 ? 'Low Risk'
+        : esg.totalEsg < 30 ? 'Medium Risk'
+        : esg.totalEsg < 40 ? 'High Risk'
+        : 'Severe Risk'
         : null,
-      percentile:           esg.percentile?.raw          ?? null,
-      peerGroup:            esg.peerGroup                ?? null,
-      peerCount:            esg.peerCount                ?? null,
-      controversyLevel:     esg.highestControversy != null
+      percentile:          esg.percentile          ?? null,
+      peerGroup:           esg.peerGroup           ?? null,
+      peerCount:           esg.peerCount           ?? null,
+      controversyLevel:    esg.highestControversy != null
         ? controversyMap[esg.highestControversy] ?? `Level ${esg.highestControversy}`
         : null,
-      // Involvement flags
-      adultInvolvement:     esg.adult                   ?? false,
-      alcoholInvolvement:   esg.alcoholic               ?? false,
-      weaponsInvolvement:   esg.weapons                 ?? false,
-      furInvolvement:       esg.furLeather               ?? false,
-      gamblingInvolvement:  esg.gambling                ?? false,
-      gmoInvolvement:       esg.gmo                     ?? false,
-      nuclearInvolvement:   esg.nuclear                 ?? false,
-      pesticideInvolvement: esg.pesticides              ?? false,
-      palmOilInvolvement:   esg.palmOil                 ?? false,
-      smallArmsInvolvement: esg.smallArms               ?? false,
-      coalInvolvement:      esg.coal                    ?? false,
-      tobaccoInvolvement:   esg.tobacco                 ?? false,
+      adultInvolvement:    esg.adult               ?? false,
+      alcoholInvolvement:  esg.alcoholic           ?? false,
+      weaponsInvolvement:  esg.weapons             ?? false,
+      gamblingInvolvement: esg.gambling            ?? false,
+      nuclearInvolvement:  esg.nuclear             ?? false,
+      tobaccoInvolvement:  esg.tobacco             ?? false,
+      coalInvolvement:     esg.coal                ?? false,
+      smallArmsInvolvement:esg.smallArms           ?? false,
       lastUpdated,
       source: 'Yahoo Finance / Sustainalytics',
     };
 
-    cache.set(cacheKey, result, 3600); // cache 1 hour
-    res.json(result);
+    cache.set(cacheKey, data, 3600);
+    res.json(data);
 
   } catch (e) {
-    // Yahoo Finance returns 404 for symbols with no ESG data
-    if (e.response?.status === 404) {
+    // No ESG data available for this symbol
+    if (e.message?.includes('No fundamentals') ||
+        e.message?.includes('Not Found') ||
+        e.message?.includes('404')) {
       return res.json({ error: 'no_data' });
     }
     console.error('/api/esg error:', e.message);
