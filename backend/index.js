@@ -410,6 +410,60 @@ app.get('/api/social-sentiment', async (req, res) => {
   }
 });
 
+
+// ── StockTwits ────────────────────────────────────────────────────────────────
+// GET /api/stocktwits?symbol=AAPL
+// Free API — no key needed. Returns real retail trader sentiment + live feed.
+app.get('/api/stocktwits', async (req, res) => {
+  const { symbol } = req.query;
+  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+  try {
+    const sym      = symbol.toUpperCase();
+    const cacheKey = `stocktwits_${sym}`;
+    if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
+    const response = await axios.get(
+      `https://api.stocktwits.com/api/2/streams/symbol/${sym}.json`,
+      {
+        params:  { limit: 30 },
+        timeout: 8000,
+        headers: { 'User-Agent': 'StockDashboard/1.0' },
+      }
+    );
+
+    const raw      = response.data;
+    const messages = (raw.messages || []).map(m => ({
+      id:        m.id,
+      body:      m.body,
+      createdAt: m.created_at,
+      sentiment: m.entities?.sentiment?.basic || null,
+      username:  m.user?.username,
+      followers: m.user?.followers,
+      likes:     m.likes?.total || 0,
+    }));
+
+    const bullish = messages.filter(m => m.sentiment === 'Bullish').length;
+    const bearish = messages.filter(m => m.sentiment === 'Bearish').length;
+
+    const result = {
+      symbol:         sym,
+      bullish,
+      bearish,
+      total:          messages.length,
+      watchlistCount: raw.symbol?.watchlist_count || null,
+      messages,
+    };
+
+    cache.set(cacheKey, result, 60);
+    res.json(result);
+  } catch (e) {
+    if (e.response?.status === 404) return res.json({ error: 'symbol_not_found' });
+    if (e.response?.status === 429) return res.status(429).json({ error: 'rate_limited' });
+    console.error('/api/stocktwits error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch StockTwits data' });
+  }
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
