@@ -2,17 +2,43 @@ import { useEffect, useState } from 'react';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 
+function sentimentColor(score) {
+  if (score >=  0.35) return '#00d4a0';
+  if (score >=  0.1)  return '#4ade80';
+  if (score >= -0.1)  return '#facc15';
+  if (score >= -0.35) return '#f97316';
+  return '#f05252';
+}
+
 function sentimentLabel(score) {
-  if (score >=  0.35) return { label: 'Very Positive', color: '#00d4a0', bg: 'rgba(0,212,160,0.1)' };
-  if (score >=  0.1)  return { label: 'Positive',      color: '#4ade80', bg: 'rgba(74,222,128,0.1)' };
-  if (score >= -0.1)  return { label: 'Neutral',        color: '#facc15', bg: 'rgba(250,204,21,0.1)' };
-  if (score >= -0.35) return { label: 'Negative',       color: '#f97316', bg: 'rgba(249,115,22,0.1)' };
-  return               { label: 'Very Negative',  color: '#f05252', bg: 'rgba(240,82,82,0.1)' };
+  if (score >=  0.35) return 'Very Positive';
+  if (score >=  0.1)  return 'Positive';
+  if (score >= -0.1)  return 'Neutral';
+  if (score >= -0.35) return 'Negative';
+  return 'Very Negative';
 }
 
 function scoreToPercent(score) {
-  // score is -1 to +1, convert to 0-100
   return Math.round(((score + 1) / 2) * 100);
+}
+
+function Sparkline({ points, color }) {
+  if (!points || points.length < 2) return null;
+  const min   = Math.min(...points);
+  const max   = Math.max(...points);
+  const range = (max - min) || 1;
+  const w = 120, h = 36;
+  const pts = points.map((p, i) => {
+    const x = (i / (points.length - 1)) * w;
+    const y = h - ((p - min) / range) * (h - 4) - 2;
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
+      <polyline points={pts} fill="none" stroke={color}
+        strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 export default function NewsSentiment({ symbol }) {
@@ -27,114 +53,109 @@ export default function NewsSentiment({ symbol }) {
       .catch(() => setLoading(false));
   }, [symbol]);
 
-  if (loading) return <Card><p style={styles.loader}>Analyzing news sentiment…</p></Card>;
+  if (loading) return <Card><p style={styles.loader}>Analysing news sentiment…</p></Card>;
   if (!data)   return null;
 
-  const { companyScore, sectorScore, marketScore, articlesProcessed, buzz, articles } = data;
-  const pct     = scoreToPercent(companyScore ?? 0);
-  const { label, color, bg } = sentimentLabel(companyScore ?? 0);
+  const { companyScore, score7d, trend, articlesProcessed,
+          breakdown, buzz, articles } = data;
+  const pct   = scoreToPercent(companyScore ?? 0);
+  const color = sentimentColor(companyScore ?? 0);
+  const label = sentimentLabel(companyScore ?? 0);
+
+  const trendDir = score7d > companyScore ? '↑' : score7d < companyScore ? '↓' : '→';
+  const trendColor = score7d > companyScore ? '#00d4a0' : score7d < companyScore ? '#f05252' : '#facc15';
 
   return (
     <Card>
+      {/* Header */}
       <div style={styles.header}>
         <p style={styles.sectionLabel}>NEWS SENTIMENT</p>
-        <span style={{ ...styles.overallBadge, color, background: bg, border: `1px solid ${color}44` }}>
+        <span style={{ ...styles.badge, color, background: `${color}18`, border: `1px solid ${color}44` }}>
           {label}
         </span>
       </div>
 
-      {/* Score gauge */}
+      {/* Score + sparkline */}
+      <div style={styles.topRow}>
+        <div>
+          <p style={{ ...styles.bigScore, color }}>{companyScore?.toFixed(3)}</p>
+          <p style={styles.bigSub}>
+            7-day trend&nbsp;
+            <span style={{ color: trendColor, fontWeight: 600 }}>
+              {trendDir} {score7d?.toFixed(3)}
+            </span>
+          </p>
+        </div>
+        <Sparkline points={trend} color={color} />
+      </div>
+
+      {/* Gauge */}
       <div style={styles.gaugeWrap}>
         <div style={styles.gaugeTrack}>
-          {/* colour zones */}
-          <div style={{ ...styles.zone, left: '0%',  width: '20%', background: '#f0525230' }} />
-          <div style={{ ...styles.zone, left: '20%', width: '20%', background: '#f9731630' }} />
-          <div style={{ ...styles.zone, left: '40%', width: '20%', background: '#facc1530' }} />
-          <div style={{ ...styles.zone, left: '60%', width: '20%', background: '#4ade8030' }} />
-          <div style={{ ...styles.zone, left: '80%', width: '20%', background: '#00d4a030' }} />
+          <div style={{ ...styles.zone, left: '0%',  width: '20%', background: '#f0525222' }} />
+          <div style={{ ...styles.zone, left: '20%', width: '20%', background: '#f9731622' }} />
+          <div style={{ ...styles.zone, left: '40%', width: '20%', background: '#facc1522' }} />
+          <div style={{ ...styles.zone, left: '60%', width: '20%', background: '#4ade8022' }} />
+          <div style={{ ...styles.zone, left: '80%', width: '20%', background: '#00d4a022' }} />
           <div style={{ ...styles.gaugeThumb, left: `${pct}%`, background: color }} />
         </div>
         <div style={styles.gaugeLabels}>
-          <span>Very Negative</span>
-          <span>Neutral</span>
-          <span>Very Positive</span>
+          <span>Very Negative</span><span>Neutral</span><span>Very Positive</span>
         </div>
       </div>
 
-      {/* Score grid */}
-      <div style={styles.scoreGrid}>
+      {/* Stats grid */}
+      <div style={styles.grid}>
         {[
-          { label: 'Company score',  value: companyScore?.toFixed(3) ?? '—', highlight: true },
-          { label: 'Sector score',   value: sectorScore?.toFixed(3)  ?? '—' },
-          { label: 'Market score',   value: marketScore?.toFixed(3)  ?? '—' },
-          { label: 'Articles (7d)',  value: articlesProcessed ?? '—' },
-        ].map(({ label, value, highlight }) => (
-          <div key={label} style={styles.scoreItem}>
-            <span style={styles.scoreLabel}>{label}</span>
-            <span style={{
-              ...styles.scoreValue,
-              color: highlight ? color : 'var(--text)',
-              fontSize: highlight ? '1.1rem' : '0.92rem',
-            }}>
-              {value}
-            </span>
+          { label: 'Articles (30d)',   value: articlesProcessed },
+          { label: 'Positive',         value: breakdown?.positive, color: '#00d4a0' },
+          { label: 'Neutral',          value: breakdown?.neutral,  color: '#facc15' },
+          { label: 'Negative',         value: breakdown?.negative, color: '#f05252' },
+          { label: 'Weekly avg',       value: buzz?.weeklyAverage },
+          { label: 'This week',        value: buzz?.articles7d },
+        ].map(({ label, value, color: c }) => (
+          <div key={label} style={styles.statItem}>
+            <span style={styles.statLabel}>{label}</span>
+            <span style={{ ...styles.statValue, color: c || 'var(--text)' }}>{value ?? '—'}</span>
           </div>
         ))}
       </div>
 
-      {/* Buzz */}
-      {buzz && (
+      {/* Buzz change */}
+      {buzz?.buzzChange != null && (
         <div style={styles.buzzRow}>
-          <div style={styles.buzzItem}>
-            <span style={styles.buzzLabel}>Weekly mentions</span>
-            <span style={styles.buzzValue}>{buzz.weeklyAverage?.toFixed(0) ?? '—'}</span>
-          </div>
-          <div style={styles.buzzDivider} />
-          <div style={styles.buzzItem}>
-            <span style={styles.buzzLabel}>Buzz change</span>
-            <span style={{
-              ...styles.buzzValue,
-              color: (buzz.buzz ?? 0) >= 0 ? '#00d4a0' : '#f05252',
-            }}>
-              {buzz.buzz != null ? `${buzz.buzz > 0 ? '+' : ''}${(buzz.buzz * 100).toFixed(1)}%` : '—'}
-            </span>
-          </div>
-          <div style={styles.buzzDivider} />
-          <div style={styles.buzzItem}>
-            <span style={styles.buzzLabel}>Articles processed</span>
-            <span style={styles.buzzValue}>{articlesProcessed ?? '—'}</span>
-          </div>
+          <span style={styles.buzzLabel}>News volume change vs 30-day avg</span>
+          <span style={{
+            ...styles.buzzValue,
+            color: buzz.buzzChange >= 0 ? '#00d4a0' : '#f05252',
+          }}>
+            {buzz.buzzChange >= 0 ? '+' : ''}{(buzz.buzzChange * 100).toFixed(1)}%
+          </span>
         </div>
       )}
 
-      {/* Individual article sentiment */}
-      {articles && articles.length > 0 && (
+      {/* Per-article sentiment */}
+      {articles?.length > 0 && (
         <div style={styles.articlesWrap}>
-          <p style={styles.subLabel}>RECENT ARTICLE SENTIMENT</p>
+          <p style={styles.subLabel}>ARTICLE SENTIMENT BREAKDOWN</p>
           {articles.map((a, i) => {
-            const s = sentimentLabel(a.sentiment ?? 0);
+            const c = sentimentColor(a.sentiment ?? 0);
+            const l = sentimentLabel(a.sentiment ?? 0);
             return (
-              <a
-                key={i}
-                href={a.url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
                 style={styles.articleRow}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-              >
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <div style={styles.articleLeft}>
                   <span style={styles.articleHeadline}>{a.headline}</span>
                   <span style={styles.articleMeta}>{a.source} · {a.date}</span>
                 </div>
-                <span style={{
-                  ...styles.sentimentChip,
-                  color: s.color,
-                  background: s.bg,
-                  border: `1px solid ${s.color}44`,
-                }}>
-                  {s.label}
-                </span>
+                <div style={styles.articleRight}>
+                  <span style={{ ...styles.chip, color: c, background: `${c}18`, border: `1px solid ${c}44` }}>
+                    {l}
+                  </span>
+                  <span style={{ ...styles.scoreChip, color: c }}>{a.sentiment?.toFixed(2)}</span>
+                </div>
               </a>
             );
           })}
@@ -147,10 +168,8 @@ export default function NewsSentiment({ symbol }) {
 function Card({ children }) {
   return (
     <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-lg)',
-      padding: '1.25rem 1.5rem',
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-lg)', padding: '1.25rem 1.5rem',
     }}>
       {children}
     </div>
@@ -158,96 +177,32 @@ function Card({ children }) {
 }
 
 const styles = {
-  header: {
-    display: 'flex', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: '1.25rem',
-  },
-  sectionLabel: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
-    letterSpacing: '0.12em', color: 'var(--muted)',
-  },
-  overallBadge: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.72rem',
-    fontWeight: 600, padding: '3px 10px', borderRadius: 5,
-  },
-  gaugeWrap: { marginBottom: '1.25rem' },
-  gaugeTrack: {
-    position: 'relative', height: 10,
-    background: 'var(--border2)', borderRadius: 5,
-    overflow: 'hidden', marginBottom: 6,
-  },
-  zone: { position: 'absolute', top: 0, height: '100%' },
-  gaugeThumb: {
-    position: 'absolute', top: '50%',
-    transform: 'translate(-50%, -50%)',
-    width: 14, height: 14, borderRadius: '50%',
-    border: '2px solid var(--bg)', zIndex: 2,
-  },
-  gaugeLabels: {
-    display: 'flex', justifyContent: 'space-between',
-    fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
-    color: 'var(--muted)', marginTop: 4,
-  },
-  scoreGrid: {
-    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '1px', background: 'var(--border)',
-    border: '1px solid var(--border)', borderRadius: 8,
-    overflow: 'hidden', marginBottom: '1rem',
-  },
-  scoreItem: {
-    background: 'var(--surface2)', padding: '0.65rem 0.9rem',
-    display: 'flex', flexDirection: 'column', gap: 4,
-  },
-  scoreLabel: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
-    color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
-  },
-  scoreValue: {
-    fontFamily: 'var(--font-mono)', fontWeight: 600,
-  },
-  buzzRow: {
-    display: 'flex', alignItems: 'center',
-    background: 'var(--surface2)', borderRadius: 8,
-    padding: '0.75rem 1rem', marginBottom: '1rem', gap: '1rem',
-  },
-  buzzItem: { display: 'flex', flexDirection: 'column', gap: 3, flex: 1 },
-  buzzDivider: { width: 1, height: 32, background: 'var(--border)' },
-  buzzLabel: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
-    color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em',
-  },
-  buzzValue: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
-    fontWeight: 600, color: 'var(--text)',
-  },
+  header:       { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
+  sectionLabel: { fontFamily: 'var(--font-mono)', fontSize: '0.65rem', letterSpacing: '0.12em', color: 'var(--muted)' },
+  badge:        { fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600, padding: '3px 10px', borderRadius: 5 },
+  topRow:       { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' },
+  bigScore:     { fontFamily: 'var(--font-mono)', fontSize: '2.2rem', fontWeight: 600, lineHeight: 1 },
+  bigSub:       { fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--muted)', marginTop: 4 },
+  gaugeWrap:    { marginBottom: '1.25rem' },
+  gaugeTrack:   { position: 'relative', height: 10, background: 'var(--border2)', borderRadius: 5, overflow: 'hidden', marginBottom: 6 },
+  zone:         { position: 'absolute', top: 0, height: '100%' },
+  gaugeThumb:   { position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)', width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--bg)', zIndex: 2 },
+  gaugeLabels:  { display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--muted)' },
+  grid:         { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'var(--border)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: '0.75rem' },
+  statItem:     { background: 'var(--surface2)', padding: '0.6rem 0.8rem', display: 'flex', flexDirection: 'column', gap: 3 },
+  statLabel:    { fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' },
+  statValue:    { fontFamily: 'var(--font-mono)', fontSize: '0.9rem', fontWeight: 600 },
+  buzzRow:      { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface2)', borderRadius: 8, padding: '0.6rem 0.9rem', marginBottom: '1rem' },
+  buzzLabel:    { fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text2)' },
+  buzzValue:    { fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 600 },
   articlesWrap: { borderTop: '1px solid var(--border)', paddingTop: '1rem' },
-  subLabel: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.62rem',
-    letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '0.65rem',
-  },
-  articleRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '0.6rem 0.5rem', borderBottom: '1px solid var(--border)',
-    textDecoration: 'none', gap: '1rem', transition: 'background 0.1s',
-    borderRadius: 4, cursor: 'pointer',
-  },
-  articleLeft: {
-    display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0,
-  },
-  articleHeadline: {
-    fontFamily: 'var(--font-sans)', fontSize: '0.8rem',
-    color: 'var(--text)', overflow: 'hidden',
-    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  },
-  articleMeta: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)',
-  },
-  sentimentChip: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
-    fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-    flexShrink: 0, whiteSpace: 'nowrap',
-  },
-  loader: {
-    fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--muted)',
-  },
+  subLabel:     { fontFamily: 'var(--font-mono)', fontSize: '0.62rem', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '0.65rem' },
+  articleRow:   { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.4rem', borderBottom: '1px solid var(--border)', textDecoration: 'none', gap: '0.75rem', transition: 'background 0.1s', borderRadius: 4 },
+  articleLeft:  { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },
+  articleHeadline: { fontFamily: 'var(--font-sans)', fontSize: '0.78rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  articleMeta:  { fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'var(--muted)' },
+  articleRight: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 },
+  chip:         { fontFamily: 'var(--font-mono)', fontSize: '0.63rem', fontWeight: 600, padding: '2px 7px', borderRadius: 4, whiteSpace: 'nowrap' },
+  scoreChip:    { fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 500, width: 36, textAlign: 'right' },
+  loader:       { fontFamily: 'var(--font-mono)', fontSize: '0.82rem', color: 'var(--muted)' },
 };
