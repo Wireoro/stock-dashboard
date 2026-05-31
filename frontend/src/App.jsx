@@ -11,7 +11,6 @@ import GovSpending from './components/GovSpending.jsx';
 import NewsSentiment from './components/NewsSentiment.jsx';
 import SocialSentiment from './components/SocialSentiment.jsx';
 import ESGScore from './components/ESGScore.jsx';
-import SupplyChain from './components/SupplyChain.jsx';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const WATCHLIST_DEFAULTS = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
@@ -76,7 +75,6 @@ export default function App() {
           <SocialSentiment  symbol={symbol} />
           <InsiderSentiment symbol={symbol} />
           <ESGScore         symbol={symbol} />
-          <SupplyChain      symbol={symbol} onSelect={handleSelect} />
           <GovSpending      symbol={symbol} companyName={companyName} />
           <Earnings         symbol={symbol} />
           <Peers            symbol={symbol} onSelect={handleSelect} />
