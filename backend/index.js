@@ -183,40 +183,100 @@ app.get('/api/insider-sentiment', async (req, res) => {
 app.get('/api/gov-spending', async (req, res) => {
   const { company } = req.query;
   if (!company) return res.status(400).json({ error: 'company is required' });
+
+  // Cache gov spending for 1 hour — data doesn't change often
+  const cacheKey = `gov_${company.toLowerCase().slice(0, 30)}`;
+  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
   try {
     const currentYear = new Date().getFullYear();
     const years       = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
-    const yearResults = await Promise.all(years.map(year =>
-      axios.post('https://api.usaspending.gov/api/v2/search/spending_by_award/', {
-        filters: { keywords: [company], award_type_codes: ['A','B','C','D'],
-          time_period: [{ start_date: `${year-1}-10-01`, end_date: `${year}-09-30` }] },
-        fields: ['Award Amount','Awarding Agency','Description','Action Date'],
-        sort: 'Award Amount', order: 'desc', limit: 10, page: 1,
-      }, { timeout: 10000 })
-        .then(r => ({ year, results: r.data?.results || [], total: r.data?.page_metadata?.total || 0 }))
-        .catch(() => ({ year, results: [], total: 0 }))
-    ));
+
+    // Strip common suffixes for better search ("Apple Inc" → "Apple")
+    const searchTerm = company
+      .replace(/\b(inc|corp|corporation|ltd|llc|co|company|technologies|systems|group)\b\.?/gi, '')
+      .trim();
+
+    async function fetchYear(year) {
+      try {
+        const r = await axios.post(
+          'https://api.usaspending.gov/api/v2/search/spending_by_award/',
+          {
+            filters: {
+              keywords:         [searchTerm],
+              award_type_codes: ['A', 'B', 'C', 'D'],
+              time_period: [{
+                start_date: `${year - 1}-10-01`,
+                end_date:   `${year}-09-30`,
+              }],
+            },
+            fields:  ['Award Amount', 'Awarding Agency', 'Description', 'Action Date', 'Recipient Name'],
+            sort:    'Award Amount',
+            order:   'desc',
+            limit:   15,
+            page:    1,
+          },
+          { timeout: 20000 }  // generous timeout for slow API
+        );
+        return {
+          year,
+          results: r.data?.results || [],
+          total:   r.data?.page_metadata?.total || 0,
+        };
+      } catch {
+        return { year, results: [], total: 0 };
+      }
+    }
+
+    // Fetch years sequentially to avoid overwhelming the API
+    const yearResults = [];
+    for (const year of years) {
+      yearResults.push(await fetchYear(year));
+    }
+
     const thisYear    = yearResults[0];
     const totalAmount = thisYear.results.reduce((s, r) => s + (r['Award Amount'] || 0), 0);
-    const agencyMap   = {};
+
+    // If no results, return empty so frontend hides the section
+    if (totalAmount === 0 && thisYear.total === 0) {
+      const empty = { totalAmount: 0, totalContracts: 0, agencies: [], recentAwards: [], yearOverYear: [] };
+      cache.set(cacheKey, empty, 3600);
+      return res.json(empty);
+    }
+
+    const agencyMap = {};
     thisYear.results.forEach(r => {
-      const a = r['Awarding Agency'] || 'Unknown';
+      const a = r['Awarding Agency'] || 'Unknown Agency';
       agencyMap[a] = (agencyMap[a] || 0) + (r['Award Amount'] || 0);
     });
-    res.json({
-      totalAmount, totalContracts: thisYear.total,
-      agencies: Object.entries(agencyMap).map(([name, amount]) => ({ name, amount }))
+
+    const result = {
+      totalAmount,
+      totalContracts: thisYear.total,
+      searchTerm,
+      agencies: Object.entries(agencyMap)
+        .map(([name, amount]) => ({ name, amount }))
         .sort((a, b) => b.amount - a.amount),
-      recentAwards: thisYear.results.slice(0, 5).map(r => ({
-        description: r['Description'] || 'Contract award',
-        agency: r['Awarding Agency'] || '—',
-        amount: r['Award Amount'] || 0, date: r['Action Date'] || '—',
+      recentAwards: thisYear.results.slice(0, 6).map(r => ({
+        description: r['Description']     || 'Contract award',
+        recipient:   r['Recipient Name']  || company,
+        agency:      r['Awarding Agency'] || '—',
+        amount:      r['Award Amount']    || 0,
+        date:        r['Action Date']     || '—',
       })),
       yearOverYear: yearResults.map(y => ({
-        year: y.year, amount: y.results.reduce((s, r) => s + (r['Award Amount'] || 0), 0),
+        year:   y.year,
+        amount: y.results.reduce((s, r) => s + (r['Award Amount'] || 0), 0),
       })),
-    });
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch government spending data' }); }
+    };
+
+    cache.set(cacheKey, result, 3600); // cache 1 hour
+    res.json(result);
+
+  } catch (e) {
+    console.error('/api/gov-spending error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch government spending data' });
+  }
 });
 
 // ── NEWS SENTIMENT (free tier — NLP on company-news) ─────────────────────────
