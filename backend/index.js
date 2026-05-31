@@ -525,10 +525,9 @@ app.get('/api/stocktwits', async (req, res) => {
 });
 
 
-
-// ── ESG Score (Yahoo Finance / Sustainalytics via yahoo-finance2) ─────────────
+// ── ESG Score (Yahoo Finance / Sustainalytics) ────────────────────────────────
 // GET /api/esg?symbol=AAPL
-// Uses yahoo-finance2 npm package which handles Yahoo auth properly
+// Uses Yahoo Finance quoteSummary esgScores module — free, no key needed
 app.get('/api/esg', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
@@ -539,70 +538,284 @@ app.get('/api/esg', async (req, res) => {
   try {
     const sym = symbol.toUpperCase();
 
-    // Dynamically import yahoo-finance2 (ESM compatible)
-    const yf = (await import('yahoo-finance2')).default;
+    const response = await axios.get(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}`,
+      {
+        params: { modules: 'esgScores' },
+        timeout: 10000,
+        headers: {
+          'User-Agent':  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept':      'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer':     'https://finance.yahoo.com/',
+        },
+      }
+    );
 
-    const result = await yf.quoteSummary(sym, {
-      modules: ['esgScores'],
-    });
+    const esg = response.data?.quoteSummary?.result?.[0]?.esgScores;
 
-    const esg = result?.esgScores;
-
-    if (!esg || Object.keys(esg).length === 0) {
+    if (!esg) {
       return res.json({ error: 'no_data' });
     }
 
+    // ratingYear + ratingMonth give us the last updated date
     const lastUpdated = esg.ratingYear && esg.ratingMonth
       ? `${esg.ratingMonth}/${esg.ratingYear}`
       : null;
 
+    // Controversy levels 0-5 (0 = none, 5 = severe)
     const controversyMap = {
-      0: 'None', 1: 'Low', 2: 'Moderate',
-      3: 'Significant', 4: 'High', 5: 'Severe',
+      0: 'None', 1: 'Low', 2: 'Moderate', 3: 'Significant', 4: 'High', 5: 'Severe',
     };
 
-    const data = {
-      totalScore:           esg.totalEsg          ?? null,
-      environmentScore:     esg.environmentScore  ?? null,
-      socialScore:          esg.socialScore       ?? null,
-      governanceScore:      esg.governanceScore   ?? null,
-      riskLevel:            esg.totalEsg != null
-        ? esg.totalEsg < 10 ? 'Negligible Risk'
-        : esg.totalEsg < 20 ? 'Low Risk'
-        : esg.totalEsg < 30 ? 'Medium Risk'
-        : esg.totalEsg < 40 ? 'High Risk'
-        : 'Severe Risk'
+    const result = {
+      totalScore:           esg.totalEsg?.raw          ?? null,
+      environmentScore:     esg.environmentScore?.raw  ?? null,
+      socialScore:          esg.socialScore?.raw        ?? null,
+      governanceScore:      esg.governanceScore?.raw    ?? null,
+      // Risk level derived from total score (lower = less risk on Sustainalytics scale)
+      riskLevel:            esg.totalEsg?.raw != null
+        ? esg.totalEsg.raw < 10  ? 'Negligible'
+        : esg.totalEsg.raw < 20  ? 'Low'
+        : esg.totalEsg.raw < 30  ? 'Medium'
+        : esg.totalEsg.raw < 40  ? 'High'
+        : 'Severe'
         : null,
-      percentile:          esg.percentile          ?? null,
-      peerGroup:           esg.peerGroup           ?? null,
-      peerCount:           esg.peerCount           ?? null,
-      controversyLevel:    esg.highestControversy != null
+      percentile:           esg.percentile?.raw          ?? null,
+      peerGroup:            esg.peerGroup                ?? null,
+      peerCount:            esg.peerCount                ?? null,
+      controversyLevel:     esg.highestControversy != null
         ? controversyMap[esg.highestControversy] ?? `Level ${esg.highestControversy}`
         : null,
-      adultInvolvement:    esg.adult               ?? false,
-      alcoholInvolvement:  esg.alcoholic           ?? false,
-      weaponsInvolvement:  esg.weapons             ?? false,
-      gamblingInvolvement: esg.gambling            ?? false,
-      nuclearInvolvement:  esg.nuclear             ?? false,
-      tobaccoInvolvement:  esg.tobacco             ?? false,
-      coalInvolvement:     esg.coal                ?? false,
-      smallArmsInvolvement:esg.smallArms           ?? false,
+      // Involvement flags
+      adultInvolvement:     esg.adult                   ?? false,
+      alcoholInvolvement:   esg.alcoholic               ?? false,
+      weaponsInvolvement:   esg.weapons                 ?? false,
+      furInvolvement:       esg.furLeather               ?? false,
+      gamblingInvolvement:  esg.gambling                ?? false,
+      gmoInvolvement:       esg.gmo                     ?? false,
+      nuclearInvolvement:   esg.nuclear                 ?? false,
+      pesticideInvolvement: esg.pesticides              ?? false,
+      palmOilInvolvement:   esg.palmOil                 ?? false,
+      smallArmsInvolvement: esg.smallArms               ?? false,
+      coalInvolvement:      esg.coal                    ?? false,
+      tobaccoInvolvement:   esg.tobacco                 ?? false,
       lastUpdated,
       source: 'Yahoo Finance / Sustainalytics',
     };
 
-    cache.set(cacheKey, data, 3600);
-    res.json(data);
+    cache.set(cacheKey, result, 3600); // cache 1 hour
+    res.json(result);
 
   } catch (e) {
-    // No ESG data available for this symbol
-    if (e.message?.includes('No fundamentals') ||
-        e.message?.includes('Not Found') ||
-        e.message?.includes('404')) {
+    // Yahoo Finance returns 404 for symbols with no ESG data
+    if (e.response?.status === 404) {
       return res.json({ error: 'no_data' });
     }
     console.error('/api/esg error:', e.message);
     res.status(500).json({ error: 'Failed to fetch ESG data' });
+  }
+});
+
+
+// ── Patent Filings (USPTO PatentsView — free, no key) ─────────────────────────
+// GET /api/patents?company=Apple+Inc&symbol=AAPL
+// Returns recent granted patents and filing trends
+app.get('/api/patents', async (req, res) => {
+  const { company, symbol } = req.query;
+  if (!company) return res.status(400).json({ error: 'company is required' });
+
+  const cacheKey = `patents_${symbol || company}`;
+  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
+  try {
+    // Strip common suffixes for better matching
+    const searchName = company
+      .replace(/\b(inc|corp|corporation|ltd|llc|co|company|technologies|systems|group|holdings?)\b\.?/gi, '')
+      .replace(/,\s*$/, '')
+      .trim();
+
+    // Fetch recent patents granted in last 2 years
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const dateStr = twoYearsAgo.toISOString().slice(0, 10);
+
+    const [recentRes, totalRes] = await Promise.all([
+      // Recent patents with details
+      axios.post('https://api.patentsview.org/patents/query', {
+        q: {
+          _and: [
+            { _contains: { assignee_organization: searchName } },
+            { _gte: { patent_date: dateStr } },
+          ],
+        },
+        f: [
+          'patent_number', 'patent_title', 'patent_date',
+          'patent_abstract', 'patent_type', 'assignee_organization',
+          'cpc_category',
+        ],
+        o: { per_page: 10, sort: [{ patent_date: 'desc' }] },
+      }, { timeout: 15000 }),
+
+      // Total count all time
+      axios.post('https://api.patentsview.org/patents/query', {
+        q: { _contains: { assignee_organization: searchName } },
+        f: ['patent_number'],
+        o: { per_page: 1 },
+      }, { timeout: 15000 }),
+    ]);
+
+    const recent = recentRes.data?.patents || [];
+    const totalCount = totalRes.data?.total_patent_count || 0;
+    const recentCount = recentRes.data?.total_patent_count || 0;
+
+    if (totalCount === 0) {
+      return res.json({ error: 'no_data' });
+    }
+
+    // Group recent patents by category
+    const categoryMap = {};
+    recent.forEach(p => {
+      const cats = p.cpc_category || [];
+      const cat = Array.isArray(cats) && cats.length > 0 ? cats[0] : 'Other';
+      categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+    });
+
+    const result = {
+      searchName,
+      totalPatents:  totalCount,
+      recentPatents: recentCount,
+      patents: recent.map(p => ({
+        number:    p.patent_number,
+        title:     p.patent_title,
+        date:      p.patent_date,
+        abstract:  p.patent_abstract?.slice(0, 200) + (p.patent_abstract?.length > 200 ? '…' : '') || null,
+        type:      p.patent_type,
+        assignee:  Array.isArray(p.assignee_organization) ? p.assignee_organization[0] : p.assignee_organization,
+        categories: Array.isArray(p.cpc_category) ? p.cpc_category.slice(0, 3) : [],
+        url: `https://patents.google.com/patent/US${p.patent_number}`,
+      })),
+      topCategories: Object.entries(categoryMap)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5),
+    };
+
+    cache.set(cacheKey, result, 3600); // cache 1 hour
+    res.json(result);
+
+  } catch (e) {
+    console.error('/api/patents error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch patent data' });
+  }
+});
+
+// ── Congressional Trading (House Stock Watcher + Senate Stock Watcher) ─────────
+// GET /api/congress-trades?symbol=AAPL
+// Returns trades by House reps and Senators for a given ticker — free, no key
+app.get('/api/congress-trades', async (req, res) => {
+  const { symbol } = req.query;
+  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+
+  const sym = symbol.toUpperCase();
+  const cacheKey = `congress_${sym}`;
+  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
+  try {
+    // Fetch House and Senate data in parallel
+    const [houseRes, senateRes] = await Promise.allSettled([
+      axios.get('https://housestockwatcher.com/api/transactions_by_ticker/' + sym, {
+        timeout: 10000,
+        headers: { 'User-Agent': 'StockDashboard/1.0' },
+      }),
+      axios.get('https://efdsearch.senate.gov/search/report/data/', {
+        params: {
+          search_type: 'annual',
+          filer_type:  'senator',
+          submitted_start_date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
+            .toISOString().slice(0, 10),
+        },
+        timeout: 10000,
+        headers: { 'User-Agent': 'StockDashboard/1.0' },
+      }),
+    ]);
+
+    // Process House trades
+    const houseTrades = houseRes.status === 'fulfilled'
+      ? (Array.isArray(houseRes.value.data) ? houseRes.value.data : [])
+          .map(t => ({
+            chamber:         'House',
+            member:          t.representative,
+            party:           t.party || null,
+            district:        t.district || null,
+            ticker:          t.ticker,
+            assetDescription: t.asset_description || null,
+            type:            t.type,            // Purchase / Sale / Exchange
+            amount:          t.amount,          // e.g. "$1,001 - $15,000"
+            transactionDate: t.transaction_date,
+            disclosureDate:  t.disclosure_date,
+            url:             t.cap_gains_over_200_usd != null
+              ? 'https://disclosures-clerk.house.gov/PublicDisclosure/FinancialDisclosure'
+              : null,
+          }))
+          .filter(t => t.ticker === sym)
+          .slice(0, 20)
+      : [];
+
+    // Process Senate — EFD returns HTML, so we fall back to known JSON endpoint
+    // Use senatestockwatcher aggregated JSON instead
+    let senateTrades = [];
+    try {
+      const swRes = await axios.get(
+        `https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions_for_ticker_${sym}.json`,
+        { timeout: 10000, headers: { 'User-Agent': 'StockDashboard/1.0' } }
+      );
+      senateTrades = (Array.isArray(swRes.data) ? swRes.data : [])
+        .map(t => ({
+          chamber:         'Senate',
+          member:          `${t.first_name} ${t.last_name}`,
+          party:           null,
+          district:        t.office || null,
+          ticker:          sym,
+          assetDescription: t.asset_description || null,
+          type:             t.type,
+          amount:           t.amount,
+          transactionDate:  t.transaction_date,
+          disclosureDate:   t.date_recieved,
+          url: t.ptr_link || null,
+        }))
+        .slice(0, 20);
+    } catch {
+      // Senate data not available for this ticker
+    }
+
+    const allTrades = [...houseTrades, ...senateTrades]
+      .sort((a, b) => new Date(b.transactionDate || 0) - new Date(a.transactionDate || 0));
+
+    if (allTrades.length === 0) {
+      return res.json({ error: 'no_data' });
+    }
+
+    // Summary stats
+    const purchases = allTrades.filter(t => t.type?.toLowerCase().includes('purchase')).length;
+    const sales     = allTrades.filter(t => t.type?.toLowerCase().includes('sale')).length;
+    const members   = [...new Set(allTrades.map(t => t.member))];
+
+    const result = {
+      symbol:      sym,
+      totalTrades: allTrades.length,
+      purchases,
+      sales,
+      uniqueMembers: members.length,
+      trades:      allTrades,
+    };
+
+    cache.set(cacheKey, result, 1800); // cache 30 min
+    res.json(result);
+
+  } catch (e) {
+    console.error('/api/congress-trades error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch congressional trading data' });
   }
 });
 
