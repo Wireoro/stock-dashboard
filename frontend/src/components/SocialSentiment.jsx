@@ -8,7 +8,7 @@ function platformColor(name) {
     twitter:        '#1d9bf0',
     wallstreetbets: '#ff4500',
     stocktwits:     '#40a0ff',
-    4chan:           '#789922',
+    '4chan':           '#789922',
   };
   return map[name?.toLowerCase()] || '#6366f1';
 }
