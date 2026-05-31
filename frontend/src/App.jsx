@@ -3,17 +3,13 @@ import SearchBar from './components/SearchBar.jsx';
 import QuoteCard from './components/QuoteCard.jsx';
 import StockChart from './components/StockChart.jsx';
 import CompanyProfile from './components/CompanyProfile.jsx';
-import NewsPanel from './components/NewsPanel.jsx';
 import Metrics from './components/Metrics.jsx';
 import Earnings from './components/Earnings.jsx';
-import Analysts from './components/Analysts.jsx';
-import Insiders from './components/Insiders.jsx';
 import Peers from './components/Peers.jsx';
 import InsiderSentiment from './components/InsiderSentiment.jsx';
 import GovSpending from './components/GovSpending.jsx';
 import NewsSentiment from './components/NewsSentiment.jsx';
 import SocialSentiment from './components/SocialSentiment.jsx';
-import StockTwits from './components/StockTwits.jsx';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const WATCHLIST_DEFAULTS = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
@@ -76,14 +72,10 @@ export default function App() {
           <StockChart       symbol={symbol} />
           <NewsSentiment    symbol={symbol} />
           <SocialSentiment  symbol={symbol} />
-          <StockTwits       symbol={symbol} />
           <InsiderSentiment symbol={symbol} />
           <GovSpending      symbol={symbol} companyName={companyName} />
-          <Analysts         symbol={symbol} />
           <Earnings         symbol={symbol} />
           <Peers            symbol={symbol} onSelect={handleSelect} />
-          <Insiders         symbol={symbol} />
-          <NewsPanel        symbol={symbol} />
         </main>
       </div>
     </div>
