@@ -524,6 +524,83 @@ app.get('/api/stocktwits', async (req, res) => {
   }
 });
 
+
+// ── ESG Score ─────────────────────────────────────────────────────────────────
+// GET /api/esg?symbol=AAPL
+// Returns environmental, social, governance scores + risk rating (Finnhub free)
+app.get('/api/esg', async (req, res) => {
+  const { symbol } = req.query;
+  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+  try {
+    const data = await finnhub('/stock/esg', { symbol: symbol.toUpperCase() });
+    if (!data || Object.keys(data).length === 0) {
+      return res.json({ error: 'no_data' });
+    }
+    res.json({
+      totalScore:       data.totalEsg          ?? null,
+      environmentScore: data.environmentScore  ?? null,
+      socialScore:      data.socialScore       ?? null,
+      governanceScore:  data.governanceScore   ?? null,
+      esgRiskRating:    data.esgRiskRating     ?? null,
+      esgRiskLevel:     data.esgRiskLevel      ?? null,
+      percentile:       data.percentile        ?? null,
+      industry:         data.highestControversy != null ? `Controversy: ${data.highestControversy}` : null,
+      lastProcessed:    data.lastProcessedDate ?? null,
+    });
+  } catch (e) {
+    console.error('/api/esg error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch ESG data' });
+  }
+});
+
+// ── Supply Chain ──────────────────────────────────────────────────────────────
+// GET /api/supply-chain?symbol=AAPL
+// Returns list of suppliers and customers (Finnhub free)
+app.get('/api/supply-chain', async (req, res) => {
+  const { symbol } = req.query;
+  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+  try {
+    const data = await finnhub('/stock/supply-chain', { symbol: symbol.toUpperCase() });
+    if (!data) return res.json({ suppliers: [], customers: [] });
+
+    const suppliers = (data.supplyChainList || [])
+      .filter(c => c.relation?.toLowerCase() === 'supplier' ||
+                   c.relation?.toLowerCase() === 'supplies to')
+      .map(c => ({
+        symbol:  c.symbol  || null,
+        name:    c.name    || c.symbol || '—',
+        country: c.country || null,
+      }));
+
+    const customers = (data.supplyChainList || [])
+      .filter(c => c.relation?.toLowerCase() === 'customer' ||
+                   c.relation?.toLowerCase() === 'buys from')
+      .map(c => ({
+        symbol:  c.symbol  || null,
+        name:    c.name    || c.symbol || '—',
+        country: c.country || null,
+      }));
+
+    // If relation field is missing, split by index as fallback
+    if (suppliers.length === 0 && customers.length === 0 && data.supplyChainList?.length > 0) {
+      const half = Math.ceil(data.supplyChainList.length / 2);
+      return res.json({
+        suppliers: data.supplyChainList.slice(0, half).map(c => ({
+          symbol: c.symbol || null, name: c.name || c.symbol || '—', country: c.country || null,
+        })),
+        customers: data.supplyChainList.slice(half).map(c => ({
+          symbol: c.symbol || null, name: c.name || c.symbol || '—', country: c.country || null,
+        })),
+      });
+    }
+
+    res.json({ suppliers, customers });
+  } catch (e) {
+    console.error('/api/supply-chain error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch supply chain data' });
+  }
+});
+
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
