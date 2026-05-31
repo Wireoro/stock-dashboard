@@ -30,16 +30,47 @@ async function finnhub(path, params = {}) {
   return data;
 }
 
-// ── Quote ─────────────────────────────────────────────────────────────────────
+// ── NLP helpers ───────────────────────────────────────────────────────────────
+const POSITIVE_WORDS = [
+  'beats','beat','growth','record','strong','upgrade','buy','surge','profit',
+  'raise','positive','bullish','expand','gain','outperform','rally','soar',
+  'exceed','boost','climb','jump','rise','high','best','win','top','leading',
+  'innovative','breakthrough','partnership','acquisition','dividend','buyback',
+];
+const NEGATIVE_WORDS = [
+  'miss','missed','cut','loss','weak','downgrade','sell','drop','decline',
+  'layoff','negative','bearish','shrink','fall','underperform','investigation',
+  'lawsuit','recall','debt','concern','risk','crash','slump','plunge','warn',
+  'slow','disappointing','reduce','lower','below','worst','crisis','fail',
+];
+
+function nlpScore(text) {
+  const lower    = text.toLowerCase();
+  const posHits  = POSITIVE_WORDS.filter(w => lower.includes(w)).length;
+  const negHits  = NEGATIVE_WORDS.filter(w => lower.includes(w)).length;
+  const total    = posHits + negHits;
+  if (total === 0) return 0;
+  // Normalise to -1 … +1
+  return Math.max(-1, Math.min(1, (posHits - negHits) / total));
+}
+
+function sentimentLabel(score) {
+  if (score >=  0.35) return 'Very Positive';
+  if (score >=  0.1)  return 'Positive';
+  if (score >= -0.1)  return 'Neutral';
+  if (score >= -0.35) return 'Negative';
+  return 'Very Negative';
+}
+
+// ── Existing routes ───────────────────────────────────────────────────────────
+
 app.get('/api/quote', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-  try {
-    res.json(await finnhub('/quote', { symbol: symbol.toUpperCase() }));
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch quote' }); }
+  try { res.json(await finnhub('/quote', { symbol: symbol.toUpperCase() })); }
+  catch (e) { res.status(500).json({ error: 'Failed to fetch quote' }); }
 });
 
-// ── Search ────────────────────────────────────────────────────────────────────
 app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'q is required' });
@@ -49,25 +80,20 @@ app.get('/api/search', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Failed to search' }); }
 });
 
-// ── Candles ───────────────────────────────────────────────────────────────────
 app.get('/api/candles', async (req, res) => {
   const { symbol, resolution = 'D', from, to } = req.query;
   if (!symbol || !from || !to) return res.status(400).json({ error: 'symbol, from, and to are required' });
-  try {
-    res.json(await finnhub('/stock/candle', { symbol: symbol.toUpperCase(), resolution, from, to }));
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch candles' }); }
+  try { res.json(await finnhub('/stock/candle', { symbol: symbol.toUpperCase(), resolution, from, to })); }
+  catch (e) { res.status(500).json({ error: 'Failed to fetch candles' }); }
 });
 
-// ── Profile ───────────────────────────────────────────────────────────────────
 app.get('/api/profile', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-  try {
-    res.json(await finnhub('/stock/profile2', { symbol: symbol.toUpperCase() }));
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch profile' }); }
+  try { res.json(await finnhub('/stock/profile2', { symbol: symbol.toUpperCase() })); }
+  catch (e) { res.status(500).json({ error: 'Failed to fetch profile' }); }
 });
 
-// ── News ──────────────────────────────────────────────────────────────────────
 app.get('/api/news', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
@@ -79,25 +105,20 @@ app.get('/api/news', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Failed to fetch news' }); }
 });
 
-// ── Metrics ───────────────────────────────────────────────────────────────────
 app.get('/api/metrics', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-  try {
-    res.json(await finnhub('/stock/metric', { symbol: symbol.toUpperCase(), metric: 'all' }));
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch metrics' }); }
+  try { res.json(await finnhub('/stock/metric', { symbol: symbol.toUpperCase(), metric: 'all' })); }
+  catch (e) { res.status(500).json({ error: 'Failed to fetch metrics' }); }
 });
 
-// ── Earnings ──────────────────────────────────────────────────────────────────
 app.get('/api/earnings', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-  try {
-    res.json(await finnhub('/stock/earnings', { symbol: symbol.toUpperCase(), limit: 8 }) || []);
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch earnings' }); }
+  try { res.json(await finnhub('/stock/earnings', { symbol: symbol.toUpperCase(), limit: 8 }) || []); }
+  catch (e) { res.status(500).json({ error: 'Failed to fetch earnings' }); }
 });
 
-// ── Recommendations ───────────────────────────────────────────────────────────
 app.get('/api/recommendations', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
@@ -107,7 +128,6 @@ app.get('/api/recommendations', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Failed to fetch recommendations' }); }
 });
 
-// ── Insiders ──────────────────────────────────────────────────────────────────
 app.get('/api/insiders', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
@@ -117,31 +137,27 @@ app.get('/api/insiders', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Failed to fetch insider transactions' }); }
 });
 
-// ── Peers ─────────────────────────────────────────────────────────────────────
 app.get('/api/peers', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-  try {
-    res.json(await finnhub('/stock/peers', { symbol: symbol.toUpperCase() }) || []);
-  } catch (e) { res.status(500).json({ error: 'Failed to fetch peers' }); }
+  try { res.json(await finnhub('/stock/peers', { symbol: symbol.toUpperCase() }) || []); }
+  catch (e) { res.status(500).json({ error: 'Failed to fetch peers' }); }
 });
 
-// ── Insider Sentiment ─────────────────────────────────────────────────────────
 app.get('/api/insider-sentiment', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
   try {
     const data         = await finnhub('/stock/insider-transactions', { symbol: symbol.toUpperCase() });
     const transactions = data?.data || [];
-    if (transactions.length === 0) {
+    if (!transactions.length) {
       return res.json({ score: 50, totalBuyValue: 0, totalSellValue: 0,
         totalBuyers: 0, totalSellers: 0, netShares: 0, recentTransactions: [] });
     }
     const cutoff  = Date.now() - 90 * 24 * 60 * 60 * 1000;
-    const recent  = transactions.filter(t => !isNaN(new Date(t.transactionDate)) &&
-      new Date(t.transactionDate).getTime() >= cutoff);
-    const buyers  = new Set();
-    const sellers = new Set();
+    const recent  = transactions.filter(t =>
+      !isNaN(new Date(t.transactionDate)) && new Date(t.transactionDate).getTime() >= cutoff);
+    const buyers  = new Set(), sellers = new Set();
     let buyValue = 0, sellValue = 0, netShares = 0;
     recent.forEach(t => {
       const val = Math.abs((t.change || 0) * (t.transactionPrice || 0));
@@ -160,12 +176,10 @@ app.get('/api/insider-sentiment', async (req, res) => {
       totalBuyers: buyers.size, totalSellers: sellers.size, netShares,
       recentTransactions: recent.slice(0, 6) });
   } catch (e) {
-    console.error('/api/insider-sentiment error:', e.message);
     res.status(500).json({ error: 'Failed to compute insider sentiment' });
   }
 });
 
-// ── Government Spending ───────────────────────────────────────────────────────
 app.get('/api/gov-spending', async (req, res) => {
   const { company } = req.query;
   if (!company) return res.status(400).json({ error: 'company is required' });
@@ -202,154 +216,197 @@ app.get('/api/gov-spending', async (req, res) => {
         year: y.year, amount: y.results.reduce((s, r) => s + (r['Award Amount'] || 0), 0),
       })),
     });
-  } catch (e) {
-    console.error('/api/gov-spending error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch government spending data' });
-  }
+  } catch (e) { res.status(500).json({ error: 'Failed to fetch government spending data' }); }
 });
 
-// ── News Sentiment ────────────────────────────────────────────────────────────
-// Uses Finnhub's NLP-scored sentiment endpoint + recent news with scores
+// ── NEWS SENTIMENT (free tier — NLP on company-news) ─────────────────────────
 app.get('/api/news-sentiment', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
   try {
-    const sym = symbol.toUpperCase();
-
-    // Finnhub sentiment + buzz endpoint
-    const sentiment = await finnhub('/news-sentiment', { symbol: sym });
-
-    // Recent news for per-article scores
+    const sym  = symbol.toUpperCase();
     const to   = new Date().toISOString().slice(0, 10);
-    const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const news = await finnhub('/company-news', { symbol: sym, from, to });
 
-    // Finnhub doesn't return per-article NLP scores on free tier,
-    // so we derive a score from headline keywords as a fallback
-    const POSITIVE_WORDS = ['beats','growth','record','strong','upgrade','buy',
-      'surge','profit','raise','positive','bullish','expand','gain','outperform'];
-    const NEGATIVE_WORDS = ['miss','cut','loss','weak','downgrade','sell','drop',
-      'decline','layoff','negative','bearish','shrink','fall','underperform','investigation'];
+    // Fetch 30 days of news for a stronger signal
+    const from30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const from7  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const scoredArticles = (news || []).slice(0, 8).map(a => {
-      const text   = (a.headline + ' ' + (a.summary || '')).toLowerCase();
-      const posHits = POSITIVE_WORDS.filter(w => text.includes(w)).length;
-      const negHits = NEGATIVE_WORDS.filter(w => text.includes(w)).length;
-      const total   = posHits + negHits;
-      const score   = total > 0 ? (posHits - negHits) / total : 0;
-      return {
-        headline:  a.headline,
-        source:    a.source,
-        url:       a.url,
-        date:      new Date(a.datetime * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        sentiment: score,
-      };
-    });
+    const [news30, news7] = await Promise.all([
+      finnhub('/company-news', { symbol: sym, from: from30, to }),
+      finnhub('/company-news', { symbol: sym, from: from7,  to }),
+    ]);
+
+    const articles30 = news30 || [];
+    const articles7  = news7  || [];
+
+    if (articles30.length === 0) {
+      return res.json({ error: 'no_data' });
+    }
+
+    // Score every article
+    const scored = articles30.map(a => ({
+      headline:  a.headline,
+      source:    a.source,
+      url:       a.url,
+      date:      new Date(a.datetime * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      sentiment: nlpScore((a.headline || '') + ' ' + (a.summary || '')),
+    }));
+
+    // Overall company score = average of all article scores
+    const companyScore = scored.reduce((s, a) => s + a.sentiment, 0) / scored.length;
+
+    // 7-day vs 30-day trend
+    const score7d  = articles7.length > 0
+      ? articles7.map(a => nlpScore((a.headline || '') + ' ' + (a.summary || '')))
+          .reduce((s, v) => s + v, 0) / articles7.length
+      : companyScore;
+
+    // Buzz: how many articles this week vs avg weekly over 30 days
+    const weeklyAverage = articles30.length / 4;
+    const buzzChange    = weeklyAverage > 0
+      ? ((articles7.length - weeklyAverage) / weeklyAverage)
+      : 0;
+
+    // Breakdown by sentiment bucket
+    const positive = scored.filter(a => a.sentiment >  0.1).length;
+    const negative = scored.filter(a => a.sentiment < -0.1).length;
+    const neutral  = scored.length - positive - negative;
 
     res.json({
-      companyScore:      sentiment?.companyNewsScore   ?? null,
-      sectorScore:       sentiment?.sectorAverageNewsScore ?? null,
-      marketScore:       sentiment?.marketAverageNewsScore ?? null,
-      articlesProcessed: sentiment?.articlesInLastWeek ?? scoredArticles.length,
+      companyScore,
+      score7d,
+      trend:             scored.slice(0, 14).map(a => a.sentiment).reverse(),
+      articlesProcessed: scored.length,
+      label:             sentimentLabel(companyScore),
+      breakdown:         { positive, negative, neutral, total: scored.length },
       buzz: {
-        buzz:          sentiment?.buzz?.buzz          ?? null,
-        weeklyAverage: sentiment?.buzz?.weeklyAverage ?? null,
+        weeklyAverage: Math.round(weeklyAverage),
+        buzzChange,
+        articles7d: articles7.length,
       },
-      articles: scoredArticles,
+      articles: scored.slice(0, 8),
     });
   } catch (e) {
     console.error('/api/news-sentiment error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch news sentiment' });
+    res.status(500).json({ error: 'Failed to analyse news sentiment' });
   }
 });
 
-// ── Social Sentiment ──────────────────────────────────────────────────────────
-// Uses Finnhub social sentiment endpoint (Reddit + Twitter data)
+// ── SOCIAL SENTIMENT (free tier — derived from news + recommendations) ────────
 app.get('/api/social-sentiment', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
   try {
     const sym  = symbol.toUpperCase();
-    const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const to   = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    // Finnhub social sentiment (Reddit + Twitter)
-    const social = await finnhub('/stock/social-sentiment', { symbol: sym, from, to });
+    // Use 3 free signals in parallel
+    const [news, recs, peers] = await Promise.all([
+      finnhub('/company-news',       { symbol: sym, from, to }),
+      finnhub('/stock/recommendation',{ symbol: sym }),
+      finnhub('/stock/peers',         { symbol: sym }),
+    ]);
 
-    const reddit  = social?.reddit  || [];
-    const twitter = social?.twitter || [];
+    const articles = news || [];
+    if (articles.length === 0) return res.json({ error: 'no_data' });
 
-    // Aggregate per-platform scores
-    function aggregatePlatform(posts, sourceName) {
-      if (!posts.length) return null;
-      const avgScore    = posts.reduce((s, p) => s + (p.score ?? 0), 0) / posts.length;
-      const totalMentions = posts.reduce((s, p) => s + (p.mention ?? 0), 0);
-      return { source: sourceName, score: avgScore, mentions: totalMentions };
+    // ── Signal 1: News NLP sentiment ──────────────────────────────────────────
+    const newsScores  = articles.map(a =>
+      nlpScore((a.headline || '') + ' ' + (a.summary || '')));
+    const newsAvg     = newsScores.reduce((s, v) => s + v, 0) / (newsScores.length || 1);
+    const newsMentions = articles.length;
+
+    // ── Signal 2: Analyst consensus → map to -1…+1 ───────────────────────────
+    const latestRec   = (recs || [])[0];
+    let analystScore  = 0;
+    let analystLabel  = 'No data';
+    if (latestRec) {
+      const total = (latestRec.strongBuy || 0) + (latestRec.buy || 0) +
+                    (latestRec.hold || 0) + (latestRec.sell || 0) + (latestRec.strongSell || 0);
+      if (total > 0) {
+        const weighted =
+          (latestRec.strongBuy  || 0) *  1.0 +
+          (latestRec.buy        || 0) *  0.5 +
+          (latestRec.hold       || 0) *  0   +
+          (latestRec.sell       || 0) * -0.5 +
+          (latestRec.strongSell || 0) * -1.0;
+        analystScore = weighted / total;
+        const bullish = (latestRec.strongBuy || 0) + (latestRec.buy || 0);
+        const bearish = (latestRec.sell || 0) + (latestRec.strongSell || 0);
+        analystLabel  = bullish > bearish * 2 ? 'Strong Buy'
+          : bullish > bearish ? 'Buy'
+          : bearish > bullish * 2 ? 'Strong Sell'
+          : bearish > bullish ? 'Sell' : 'Hold';
+      }
     }
 
-    const redditAgg  = aggregatePlatform(reddit,  'Reddit');
-    const twitterAgg = aggregatePlatform(twitter, 'Twitter');
-    const platforms  = [redditAgg, twitterAgg].filter(Boolean);
+    // ── Signal 3: Price momentum from recent news volume ─────────────────────
+    const recentCount = articles.filter(a => {
+      const age = Date.now() - a.datetime * 1000;
+      return age < 7 * 24 * 60 * 60 * 1000;
+    }).length;
+    const momentumScore = newsAvg * (recentCount > 5 ? 1.2 : 1.0); // amplify if lots of news
 
-    // Overall score weighted by mention count
-    let overall = 0;
-    const totalMentions = platforms.reduce((s, p) => s + p.mentions, 0);
-    if (totalMentions > 0) {
-      overall = platforms.reduce((s, p) => s + p.score * (p.mentions / totalMentions), 0);
-    } else if (platforms.length > 0) {
-      overall = platforms.reduce((s, p) => s + p.score, 0) / platforms.length;
-    }
+    // ── Combine signals (weighted) ────────────────────────────────────────────
+    const overall = (newsAvg * 0.5) + (analystScore * 0.4) + (momentumScore * 0.1);
 
-    // Build 7-day trend from daily reddit scores
-    const trend = reddit.slice(-7).map(p => p.score ?? 0);
+    // ── Build platform breakdown ──────────────────────────────────────────────
+    // Group articles by source as proxy for "platforms"
+    const sourceMap = {};
+    articles.forEach(a => {
+      const src = a.source || 'Unknown';
+      if (!sourceMap[src]) sourceMap[src] = [];
+      sourceMap[src].push(nlpScore((a.headline || '') + ' ' + (a.summary || '')));
+    });
+    const platforms = Object.entries(sourceMap)
+      .map(([source, scores]) => ({
+        source,
+        score:    scores.reduce((s, v) => s + v, 0) / scores.length,
+        mentions: scores.length,
+      }))
+      .sort((a, b) => b.mentions - a.mentions)
+      .slice(0, 6);
 
-    // Mention stats
-    const allPosts     = [...reddit, ...twitter];
-    const totalDay     = allPosts.reduce((s, p) => s + (p.mention ?? 0), 0);
-    const positivePosts = allPosts.filter(p => (p.score ?? 0) >  0.1).length;
-    const negativePosts = allPosts.filter(p => (p.score ?? 0) < -0.1).length;
-    const neutralPosts  = allPosts.length - positivePosts - negativePosts;
-    const positivePct   = allPosts.length > 0 ? Math.round((positivePosts / allPosts.length) * 100) : 33;
-    const negativePct   = allPosts.length > 0 ? Math.round((negativePosts / allPosts.length) * 100) : 33;
+    // ── 7-day trend ───────────────────────────────────────────────────────────
+    const trend = articles.slice(0, 14)
+      .map(a => nlpScore((a.headline || '') + ' ' + (a.summary || '')))
+      .reverse();
 
-    // Recent posts for the Posts tab (combine reddit + twitter, sort by date)
-    const recentPosts = [
-      ...reddit.slice(0, 5).map(p => ({
-        source:    'Reddit',
-        text:      p.mentionedBullish > p.mentionedBearish
-          ? `Bullish discussion — ${p.mentionedBullish} bullish mentions vs ${p.mentionedBearish} bearish`
-          : `Bearish discussion — ${p.mentionedBearish} bearish mentions vs ${p.mentionedBullish} bullish`,
-        sentiment: p.score ?? 0,
-        upvotes:   p.positiveMention ?? null,
-        comments:  null,
-        date:      p.atTime ? new Date(p.atTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—',
-      })),
-      ...twitter.slice(0, 5).map(p => ({
-        source:    'Twitter',
-        text:      `${p.mention ?? 0} mentions — ${p.mentionedBullish ?? 0} bullish, ${p.mentionedBearish ?? 0} bearish`,
-        sentiment: p.score ?? 0,
-        likes:     p.positiveMention ?? null,
-        comments:  null,
-        date:      p.atTime ? new Date(p.atTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—',
-      })),
-    ].slice(0, 8);
+    // ── Mention stats ─────────────────────────────────────────────────────────
+    const posCount = newsScores.filter(s => s >  0.1).length;
+    const negCount = newsScores.filter(s => s < -0.1).length;
+    const positivePct = Math.round((posCount / newsScores.length) * 100);
+    const negativePct = Math.round((negCount / newsScores.length) * 100);
+
+    // ── Recent posts (formatted news articles) ────────────────────────────────
+    const posts = articles.slice(0, 8).map(a => ({
+      source:    a.source || 'News',
+      text:      a.headline,
+      sentiment: nlpScore((a.headline || '') + ' ' + (a.summary || '')),
+      url:       a.url,
+      date:      new Date(a.datetime * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    }));
 
     res.json({
       overall,
+      analystScore,
+      analystLabel,
       platforms,
       trend,
       mentions: {
-        day:      totalDay,
-        week:     totalDay * 7,
+        day:      recentCount,
+        week:     newsMentions,
         positive: positivePct,
         negative: negativePct,
-        neutral:  allPosts.length > 0 ? Math.round((neutralPosts / allPosts.length) * 100) : 34,
+        neutral:  100 - positivePct - negativePct,
       },
-      posts: recentPosts,
+      posts,
+      note: 'Signals derived from news NLP + analyst consensus (free tier)',
     });
   } catch (e) {
     console.error('/api/social-sentiment error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch social sentiment' });
+    res.status(500).json({ error: 'Failed to compute social sentiment' });
   }
 });
 
