@@ -11,6 +11,8 @@ import Insiders from './components/Insiders.jsx';
 import Peers from './components/Peers.jsx';
 import InsiderSentiment from './components/InsiderSentiment.jsx';
 import GovSpending from './components/GovSpending.jsx';
+import NewsSentiment from './components/NewsSentiment.jsx';
+import SocialSentiment from './components/SocialSentiment.jsx';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const WATCHLIST_DEFAULTS = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
@@ -20,7 +22,6 @@ export default function App() {
   const [watchlist, setWatchlist]     = useState(WATCHLIST_DEFAULTS);
   const [companyName, setCompanyName] = useState('Apple Inc');
 
-  // Fetch company name whenever symbol changes (needed for GovSpending)
   useEffect(() => {
     fetch(`${API}/api/profile?symbol=${symbol}`)
       .then(r => r.json())
@@ -43,7 +44,6 @@ export default function App() {
 
   return (
     <div style={styles.shell}>
-      {/* Header */}
       <header style={styles.header}>
         <div style={styles.logo}>
           <span style={styles.logoMark}>▸</span>
@@ -55,7 +55,6 @@ export default function App() {
       </header>
 
       <div style={styles.layout}>
-        {/* Sidebar watchlist */}
         <aside style={styles.sidebar}>
           <p style={styles.sidebarLabel}>WATCHLIST</p>
           {watchlist.map(sym => (
@@ -69,19 +68,20 @@ export default function App() {
           ))}
         </aside>
 
-        {/* Main content */}
         <main style={styles.main}>
-          <QuoteCard symbol={symbol} onAdd={() => addToWatchlist(symbol)} />
+          <QuoteCard      symbol={symbol} onAdd={() => addToWatchlist(symbol)} />
           <CompanyProfile symbol={symbol} />
-          <Metrics symbol={symbol} />
-          <StockChart symbol={symbol} />
+          <Metrics        symbol={symbol} />
+          <StockChart     symbol={symbol} />
+          <NewsSentiment  symbol={symbol} />
+          <SocialSentiment symbol={symbol} />
           <InsiderSentiment symbol={symbol} />
-          <GovSpending symbol={symbol} companyName={companyName} />
-          <Analysts symbol={symbol} />
-          <Earnings symbol={symbol} />
-          <Peers symbol={symbol} onSelect={handleSelect} />
-          <Insiders symbol={symbol} />
-          <NewsPanel symbol={symbol} />
+          <GovSpending    symbol={symbol} companyName={companyName} />
+          <Analysts       symbol={symbol} />
+          <Earnings       symbol={symbol} />
+          <Peers          symbol={symbol} onSelect={handleSelect} />
+          <Insiders       symbol={symbol} />
+          <NewsPanel      symbol={symbol} />
         </main>
       </div>
     </div>
@@ -122,8 +122,8 @@ const styles = {
   logo: { display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 },
   logoMark: { color: 'var(--accent)', fontSize: '1.4rem' },
   logoText: {
-    fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: '1.05rem',
-    letterSpacing: '0.15em', color: 'var(--text)',
+    fontFamily: 'var(--font-sans)', fontWeight: 700,
+    fontSize: '1.05rem', letterSpacing: '0.15em', color: 'var(--text)',
   },
   headerSearch: { flex: 1, maxWidth: 480 },
   layout: { display: 'flex', flex: 1, minHeight: 0 },
@@ -138,13 +138,14 @@ const styles = {
   },
   watchItem: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 0.5rem 0 1rem', borderRadius: 6, border: '1px solid transparent',
+    padding: '0 0.5rem 0 1rem', borderRadius: 6,
+    border: '1px solid transparent',
     transition: 'background 0.15s, border-color 0.15s', margin: '0 0.5rem',
   },
   watchBtn: {
     flex: 1, background: 'none', border: 'none', padding: '0.55rem 0',
-    textAlign: 'left', fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
-    color: 'var(--text2)', cursor: 'pointer',
+    textAlign: 'left', fontFamily: 'var(--font-mono)',
+    fontSize: '0.85rem', color: 'var(--text2)', cursor: 'pointer',
   },
   removeBtn: {
     background: 'none', border: 'none', color: 'var(--muted)',
