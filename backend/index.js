@@ -525,79 +525,95 @@ app.get('/api/stocktwits', async (req, res) => {
 });
 
 
-// ── ESG Score ─────────────────────────────────────────────────────────────────
+// ── ESG Score (Yahoo Finance / Sustainalytics) ────────────────────────────────
 // GET /api/esg?symbol=AAPL
-// Returns environmental, social, governance scores + risk rating (Finnhub free)
+// Uses Yahoo Finance quoteSummary esgScores module — free, no key needed
 app.get('/api/esg', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+
+  const cacheKey = `esg_${symbol.toUpperCase()}`;
+  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
   try {
-    const data = await finnhub('/stock/esg', { symbol: symbol.toUpperCase() });
-    if (!data || Object.keys(data).length === 0) {
+    const sym = symbol.toUpperCase();
+
+    const response = await axios.get(
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${sym}`,
+      {
+        params: { modules: 'esgScores' },
+        timeout: 10000,
+        headers: {
+          'User-Agent':  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept':      'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer':     'https://finance.yahoo.com/',
+        },
+      }
+    );
+
+    const esg = response.data?.quoteSummary?.result?.[0]?.esgScores;
+
+    if (!esg) {
       return res.json({ error: 'no_data' });
     }
-    res.json({
-      totalScore:       data.totalEsg          ?? null,
-      environmentScore: data.environmentScore  ?? null,
-      socialScore:      data.socialScore       ?? null,
-      governanceScore:  data.governanceScore   ?? null,
-      esgRiskRating:    data.esgRiskRating     ?? null,
-      esgRiskLevel:     data.esgRiskLevel      ?? null,
-      percentile:       data.percentile        ?? null,
-      industry:         data.highestControversy != null ? `Controversy: ${data.highestControversy}` : null,
-      lastProcessed:    data.lastProcessedDate ?? null,
-    });
+
+    // ratingYear + ratingMonth give us the last updated date
+    const lastUpdated = esg.ratingYear && esg.ratingMonth
+      ? `${esg.ratingMonth}/${esg.ratingYear}`
+      : null;
+
+    // Controversy levels 0-5 (0 = none, 5 = severe)
+    const controversyMap = {
+      0: 'None', 1: 'Low', 2: 'Moderate', 3: 'Significant', 4: 'High', 5: 'Severe',
+    };
+
+    const result = {
+      totalScore:           esg.totalEsg?.raw          ?? null,
+      environmentScore:     esg.environmentScore?.raw  ?? null,
+      socialScore:          esg.socialScore?.raw        ?? null,
+      governanceScore:      esg.governanceScore?.raw    ?? null,
+      // Risk level derived from total score (lower = less risk on Sustainalytics scale)
+      riskLevel:            esg.totalEsg?.raw != null
+        ? esg.totalEsg.raw < 10  ? 'Negligible'
+        : esg.totalEsg.raw < 20  ? 'Low'
+        : esg.totalEsg.raw < 30  ? 'Medium'
+        : esg.totalEsg.raw < 40  ? 'High'
+        : 'Severe'
+        : null,
+      percentile:           esg.percentile?.raw          ?? null,
+      peerGroup:            esg.peerGroup                ?? null,
+      peerCount:            esg.peerCount                ?? null,
+      controversyLevel:     esg.highestControversy != null
+        ? controversyMap[esg.highestControversy] ?? `Level ${esg.highestControversy}`
+        : null,
+      // Involvement flags
+      adultInvolvement:     esg.adult                   ?? false,
+      alcoholInvolvement:   esg.alcoholic               ?? false,
+      weaponsInvolvement:   esg.weapons                 ?? false,
+      furInvolvement:       esg.furLeather               ?? false,
+      gamblingInvolvement:  esg.gambling                ?? false,
+      gmoInvolvement:       esg.gmo                     ?? false,
+      nuclearInvolvement:   esg.nuclear                 ?? false,
+      pesticideInvolvement: esg.pesticides              ?? false,
+      palmOilInvolvement:   esg.palmOil                 ?? false,
+      smallArmsInvolvement: esg.smallArms               ?? false,
+      coalInvolvement:      esg.coal                    ?? false,
+      tobaccoInvolvement:   esg.tobacco                 ?? false,
+      lastUpdated,
+      source: 'Yahoo Finance / Sustainalytics',
+    };
+
+    cache.set(cacheKey, result, 3600); // cache 1 hour
+    res.json(result);
+
   } catch (e) {
+    // Yahoo Finance returns 404 for symbols with no ESG data
+    if (e.response?.status === 404) {
+      return res.json({ error: 'no_data' });
+    }
     console.error('/api/esg error:', e.message);
     res.status(500).json({ error: 'Failed to fetch ESG data' });
-  }
-});
-
-// ── Supply Chain ──────────────────────────────────────────────────────────────
-// GET /api/supply-chain?symbol=AAPL
-// Returns list of suppliers and customers (Finnhub free)
-app.get('/api/supply-chain', async (req, res) => {
-  const { symbol } = req.query;
-  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-  try {
-    const data = await finnhub('/stock/supply-chain', { symbol: symbol.toUpperCase() });
-    if (!data) return res.json({ suppliers: [], customers: [] });
-
-    const suppliers = (data.supplyChainList || [])
-      .filter(c => c.relation?.toLowerCase() === 'supplier' ||
-                   c.relation?.toLowerCase() === 'supplies to')
-      .map(c => ({
-        symbol:  c.symbol  || null,
-        name:    c.name    || c.symbol || '—',
-        country: c.country || null,
-      }));
-
-    const customers = (data.supplyChainList || [])
-      .filter(c => c.relation?.toLowerCase() === 'customer' ||
-                   c.relation?.toLowerCase() === 'buys from')
-      .map(c => ({
-        symbol:  c.symbol  || null,
-        name:    c.name    || c.symbol || '—',
-        country: c.country || null,
-      }));
-
-    // If relation field is missing, split by index as fallback
-    if (suppliers.length === 0 && customers.length === 0 && data.supplyChainList?.length > 0) {
-      const half = Math.ceil(data.supplyChainList.length / 2);
-      return res.json({
-        suppliers: data.supplyChainList.slice(0, half).map(c => ({
-          symbol: c.symbol || null, name: c.name || c.symbol || '—', country: c.country || null,
-        })),
-        customers: data.supplyChainList.slice(half).map(c => ({
-          symbol: c.symbol || null, name: c.name || c.symbol || '—', country: c.country || null,
-        })),
-      });
-    }
-
-    res.json({ suppliers, customers });
-  } catch (e) {
-    console.error('/api/supply-chain error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch supply chain data' });
   }
 });
 
