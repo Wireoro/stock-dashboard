@@ -25,14 +25,8 @@ function roeRating(roe) {
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border2)',
-      borderRadius: 8, padding: '10px 14px', minWidth: 160,
-      boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-    }}>
-      <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)', marginBottom: 6 }}>
-        FY {label}
-      </p>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border2)', borderRadius: 8, padding: '10px 14px', minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+      <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)', marginBottom: 6 }}>FY {label}</p>
       {payload.map((p, i) => (
         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: 3 }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: p.color }}>{p.name}</span>
@@ -64,10 +58,9 @@ export default function ROEChart({ symbol }) {
   const { timeline, current } = data;
   const latest  = timeline[timeline.length - 1];
   const rating  = roeRating(latest?.roe ?? current?.roe);
-
   const last3   = timeline.slice(-3).map(d => d.roe).filter(v => v != null);
   const prior3  = timeline.slice(-6, -3).map(d => d.roe).filter(v => v != null);
-  const avg     = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  const avg     = arr => arr.length ? arr.reduce((a,b) => a+b,0) / arr.length : null;
   const l3 = avg(last3), p3 = avg(prior3);
   const trend = l3 != null && p3 != null
     ? l3 > p3 + 2  ? { label: 'Improving ↑', color: '#6B8F71' }
@@ -76,11 +69,9 @@ export default function ROEChart({ symbol }) {
     : null;
 
   function toggle(key) {
-    setActive(prev =>
-      prev.includes(key)
-        ? prev.length > 1 ? prev.filter(k => k !== key) : prev
-        : [...prev, key]
-    );
+    setActive(prev => prev.includes(key)
+      ? prev.length > 1 ? prev.filter(k => k !== key) : prev
+      : [...prev, key]);
   }
 
   return (
@@ -110,7 +101,6 @@ export default function ROEChart({ symbol }) {
         </div>
       </div>
 
-      {/* Toggles */}
       <div style={styles.toggleRow}>
         {METRICS.map(m => (
           <button key={m.key} style={{
@@ -119,7 +109,7 @@ export default function ROEChart({ symbol }) {
             borderColor: active.includes(m.key) ? m.color : 'var(--border2)',
             background:  active.includes(m.key) ? `${m.color}10` : 'transparent',
           }} onClick={() => toggle(m.key)}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: m.color, flexShrink: 0, display: 'inline-block' }} />
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: active.includes(m.key) ? m.color : 'var(--muted)' }}>
               {m.label}
             </span>
@@ -127,7 +117,6 @@ export default function ROEChart({ symbol }) {
         ))}
       </div>
 
-      {/* Chart */}
       <div style={{ height: 300 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={timeline} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -155,7 +144,6 @@ export default function ROEChart({ symbol }) {
         </ResponsiveContainer>
       </div>
 
-      {/* TTM row */}
       {current && (
         <div style={styles.currentRow}>
           {[
