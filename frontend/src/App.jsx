@@ -5,13 +5,10 @@ import StockChart from './components/StockChart.jsx';
 import CompanyProfile from './components/CompanyProfile.jsx';
 import Metrics from './components/Metrics.jsx';
 import Earnings from './components/Earnings.jsx';
-import Peers from './components/Peers.jsx';
 import InsiderSentiment from './components/InsiderSentiment.jsx';
 import GovSpending from './components/GovSpending.jsx';
-import NewsSentiment from './components/NewsSentiment.jsx';
 import SocialSentiment from './components/SocialSentiment.jsx';
 import ESGScore from './components/ESGScore.jsx';
-import ROEChart from './components/ROEChart.jsx';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const WATCHLIST_DEFAULTS = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
@@ -72,14 +69,11 @@ export default function App() {
           <CompanyProfile   symbol={symbol} />
           <Metrics          symbol={symbol} />
           <StockChart       symbol={symbol} />
-          <ROEChart         symbol={symbol} />
-          <NewsSentiment    symbol={symbol} />
           <SocialSentiment  symbol={symbol} />
           <InsiderSentiment symbol={symbol} />
           <ESGScore         symbol={symbol} />
           <GovSpending      symbol={symbol} companyName={companyName} />
           <Earnings         symbol={symbol} />
-          <Peers            symbol={symbol} onSelect={handleSelect} />
         </main>
       </div>
     </div>
