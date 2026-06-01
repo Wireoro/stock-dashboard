@@ -11,7 +11,6 @@ import GovSpending from './components/GovSpending.jsx';
 import NewsSentiment from './components/NewsSentiment.jsx';
 import SocialSentiment from './components/SocialSentiment.jsx';
 import ESGScore from './components/ESGScore.jsx';
-import ROEChart from './components/ROEChart.jsx';
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 const WATCHLIST_DEFAULTS = ['AAPL', 'MSFT', 'GOOGL', 'NVDA', 'TSLA'];
@@ -46,7 +45,7 @@ export default function App() {
       <header style={styles.header}>
         <div style={styles.logo}>
           <span style={styles.logoMark}>▸</span>
-          <span style={styles.logoText}>STOCKPULSE</span>
+          <span style={styles.logoText}>INVESTABLE KNOWLEDGE</span>
         </div>
         <div style={styles.headerSearch}>
           <SearchBar onSelect={handleSelect} />
@@ -72,7 +71,6 @@ export default function App() {
           <CompanyProfile   symbol={symbol} />
           <Metrics          symbol={symbol} />
           <StockChart       symbol={symbol} />
-          <ROEChart         symbol={symbol} />
           <NewsSentiment    symbol={symbol} />
           <SocialSentiment  symbol={symbol} />
           <InsiderSentiment symbol={symbol} />
