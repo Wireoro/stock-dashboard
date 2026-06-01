@@ -618,85 +618,127 @@ app.get('/api/esg', async (req, res) => {
 });
 
 
-// ── ROE History (Finnhub metric series — free tier) ───────────────────────────
-// GET /api/roe-history?symbol=AAPL
-// Returns annual ROE + related profitability metrics over time
-app.get('/api/roe-history', async (req, res) => {
+// ── Stock Performance (Finnhub candles — free tier) ───────────────────────────
+// GET /api/performance?symbol=AAPL
+// Returns price change % for 1d, 5d, 1m, 6m, YTD, 1y, 5y, 10y
+app.get('/api/performance', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
 
-  const cacheKey = `roe_${symbol.toUpperCase()}`;
+  const cacheKey = `perf_${symbol.toUpperCase()}`;
   if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
 
   try {
-    const data = await finnhub('/stock/metric', {
-      symbol: symbol.toUpperCase(),
-      metric: 'all',
-    });
+    const sym = symbol.toUpperCase();
+    const now = Math.floor(Date.now() / 1000);
 
-    const series = data?.series?.annual;
+    // Helper: unix timestamp for N days ago
+    const daysAgo = d => now - d * 86400;
 
-    if (!series) {
-      return res.json({ error: 'no_data' });
+    // YTD: Jan 1 of current year
+    const ytdStart = Math.floor(new Date(new Date().getFullYear(), 0, 1).getTime() / 1000);
+
+    // Fetch candles for multiple periods in parallel
+    // We use daily resolution for everything except 1d (use quote instead)
+    const [
+      quote,
+      candle1m,
+      candle6m,
+      candle1y,
+      candle5y,
+      candle10y,
+      candleYtd,
+    ] = await Promise.all([
+      // Current quote for live price + 1d + 5d
+      finnhub('/quote', { symbol: sym }),
+      // 1 month daily candles
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: daysAgo(35),  to: now }),
+      // 6 months daily
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: daysAgo(185), to: now }),
+      // 1 year daily
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: daysAgo(370), to: now }),
+      // 5 years weekly
+      finnhub('/stock/candle', { symbol: sym, resolution: 'W', from: daysAgo(1830), to: now }),
+      // 10 years weekly
+      finnhub('/stock/candle', { symbol: sym, resolution: 'W', from: daysAgo(3660), to: now }),
+      // YTD daily
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: ytdStart, to: now }),
+    ]);
+
+    const currentPrice = quote?.c;
+    if (!currentPrice) return res.json({ error: 'no_data' });
+
+    // Helper: get first close from a candle response
+    function firstClose(candle) {
+      if (!candle || candle.s !== 'ok' || !candle.c?.length) return null;
+      return candle.c[0];
     }
 
-    // Extract and align all profitability series by period
-    const roeSeries        = series.roe        || [];
-    const roaSeries        = series.roa        || [];
-    const netMarginSeries  = series.netMargin  || [];
-    const grossMarginSeries = series.grossMargin || [];
-    const revenueGrowthSeries = series.revenueGrowth || [];
-
-    // Build a unified timeline from ROE periods
-    const periods = roeSeries
-      .map(p => p.period)
-      .filter(Boolean)
-      .sort((a, b) => new Date(a) - new Date(b));
-
-    if (periods.length === 0) {
-      return res.json({ error: 'no_data' });
+    // Helper: get close N trading days back from a daily candle set
+    function closeNDaysBack(candle, n) {
+      if (!candle || candle.s !== 'ok' || !candle.c?.length) return null;
+      const idx = candle.c.length - 1 - n;
+      return idx >= 0 ? candle.c[idx] : candle.c[0];
     }
 
-    // Helper to find value for a period
-    function findVal(seriesArr, period) {
-      const match = seriesArr.find(p => p.period === period);
-      if (match?.v == null) return null;
-      // Finnhub stores ratios as decimals (0.15 = 15%) — multiply by 100
-      return Math.round(match.v * 100 * 100) / 100;
+    // Helper: calculate % change
+    function pct(from, to) {
+      if (!from || !to || from === 0) return null;
+      return ((to - from) / from) * 100;
     }
 
-    const timeline = periods.map(period => ({
-      period,
-      year:         period.slice(0, 4),
-      roe:          findVal(roeSeries, period),
-      roa:          findVal(roaSeries, period),
-      netMargin:    findVal(netMarginSeries, period),
-      grossMargin:  findVal(grossMarginSeries, period),
-      revenueGrowth: findVal(revenueGrowthSeries, period),
-    })).filter(d => d.roe != null); // only include years with ROE data
+    // 1 day: use quote's prev close
+    const change1d = quote?.dp ?? null;
 
-    if (timeline.length === 0) {
-      return res.json({ error: 'no_data' });
-    }
+    // 5 days: 5 trading days back in 1m candle
+    const price5d   = closeNDaysBack(candle1m, 5);
+    const change5d  = pct(price5d, currentPrice);
+
+    // 1 month
+    const price1m   = firstClose(candle1m);
+    const change1m  = pct(price1m, currentPrice);
+
+    // 6 months
+    const price6m   = firstClose(candle6m);
+    const change6m  = pct(price6m, currentPrice);
+
+    // YTD
+    const priceYtd  = firstClose(candleYtd);
+    const changeYtd = pct(priceYtd, currentPrice);
+
+    // 1 year
+    const price1y   = firstClose(candle1y);
+    const change1y  = pct(price1y, currentPrice);
+
+    // 5 years
+    const price5y   = firstClose(candle5y);
+    const change5y  = pct(price5y, currentPrice);
+
+    // 10 years
+    const price10y  = firstClose(candle10y);
+    const change10y = pct(price10y, currentPrice);
 
     const result = {
-      symbol:   symbol.toUpperCase(),
-      timeline, // array of { period, year, roe, roa, netMargin, grossMargin, revenueGrowth }
-      current: {
-        // TTM values from /stock/metric are already in % — no conversion needed
-        roe:         data.metric?.roeTTM              ?? null,
-        roa:         data.metric?.roaTTM              ?? null,
-        netMargin:   data.metric?.netProfitMarginTTM  ?? null,
-        grossMargin: data.metric?.grossMarginTTM      ?? null,
-      },
+      symbol: sym,
+      currentPrice,
+      periods: [
+        { label: '1 day',      key: '1d',  change: change1d  },
+        { label: '5 days',     key: '5d',  change: change5d  },
+        { label: '1 month',    key: '1m',  change: change1m  },
+        { label: '6 months',   key: '6m',  change: change6m  },
+        { label: 'Year to date', key: 'ytd', change: changeYtd },
+        { label: '1 year',     key: '1y',  change: change1y  },
+        { label: '5 years',    key: '5y',  change: change5y  },
+        { label: '10 years',   key: '10y', change: change10y },
+      ],
     };
 
-    cache.set(cacheKey, result, 3600);
+    cache.set(cacheKey, result, 300); // cache 5 minutes
     res.json(result);
 
   } catch (e) {
-    console.error('/api/roe-history error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch ROE history' });
+    console.error('/api/performance error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch performance data' });
   }
 });
 
