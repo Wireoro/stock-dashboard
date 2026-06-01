@@ -618,124 +618,127 @@ app.get('/api/esg', async (req, res) => {
 });
 
 
-// ── Revenue Breakdown (Finnhub — free tier) ───────────────────────────────────
-// GET /api/revenue-breakdown?symbol=AAPL
-// Returns product and geographic segment revenue splits
-app.get('/api/revenue-breakdown', async (req, res) => {
+// ── Stock Performance (Finnhub candles — free tier) ───────────────────────────
+// GET /api/performance?symbol=AAPL
+// Returns price change % for 1d, 5d, 1m, 6m, YTD, 1y, 5y, 10y
+app.get('/api/performance', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
 
-  const cacheKey = `revenue_${symbol.toUpperCase()}`;
+  const cacheKey = `perf_${symbol.toUpperCase()}`;
   if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
 
   try {
-    const data = await finnhub('/stock/revenue-breakdown', {
-      symbol: symbol.toUpperCase(),
-    });
+    const sym = symbol.toUpperCase();
+    const now = Math.floor(Date.now() / 1000);
 
-    if (!data || (!data.data?.length && !data.cogs)) {
-      return res.json({ error: 'no_data' });
+    // Helper: unix timestamp for N days ago
+    const daysAgo = d => now - d * 86400;
+
+    // YTD: Jan 1 of current year
+    const ytdStart = Math.floor(new Date(new Date().getFullYear(), 0, 1).getTime() / 1000);
+
+    // Fetch candles for multiple periods in parallel
+    // We use daily resolution for everything except 1d (use quote instead)
+    const [
+      quote,
+      candle1m,
+      candle6m,
+      candle1y,
+      candle5y,
+      candle10y,
+      candleYtd,
+    ] = await Promise.all([
+      // Current quote for live price + 1d + 5d
+      finnhub('/quote', { symbol: sym }),
+      // 1 month daily candles
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: daysAgo(35),  to: now }),
+      // 6 months daily
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: daysAgo(185), to: now }),
+      // 1 year daily
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: daysAgo(370), to: now }),
+      // 5 years weekly
+      finnhub('/stock/candle', { symbol: sym, resolution: 'W', from: daysAgo(1830), to: now }),
+      // 10 years weekly
+      finnhub('/stock/candle', { symbol: sym, resolution: 'W', from: daysAgo(3660), to: now }),
+      // YTD daily
+      finnhub('/stock/candle', { symbol: sym, resolution: 'D', from: ytdStart, to: now }),
+    ]);
+
+    const currentPrice = quote?.c;
+    if (!currentPrice) return res.json({ error: 'no_data' });
+
+    // Helper: get first close from a candle response
+    function firstClose(candle) {
+      if (!candle || candle.s !== 'ok' || !candle.c?.length) return null;
+      return candle.c[0];
     }
 
-    // Finnhub returns an array of period objects
-    // Each period has product and geographic breakdowns
-    const periods = (data.data || []).sort((a, b) =>
-      new Date(b.period) - new Date(a.period)
-    );
-
-    if (periods.length === 0) return res.json({ error: 'no_data' });
-
-    // Take the most recent period + last 4 for history
-    const latest   = periods[0];
-    const history  = periods.slice(0, 5);
-
-    // Helper to extract and sort segments
-    function extractSegments(periodObj, key) {
-      const raw = periodObj?.[key] || {};
-      return Object.entries(raw)
-        .map(([name, value]) => ({ name: name.trim(), value }))
-        .filter(s => s.value > 0)
-        .sort((a, b) => b.value - a.value);
+    // Helper: get close N trading days back from a daily candle set
+    function closeNDaysBack(candle, n) {
+      if (!candle || candle.s !== 'ok' || !candle.c?.length) return null;
+      const idx = candle.c.length - 1 - n;
+      return idx >= 0 ? candle.c[idx] : candle.c[0];
     }
 
-    const productSegments  = extractSegments(latest, 'product');
-    const geoSegments      = extractSegments(latest, 'geographic');
+    // Helper: calculate % change
+    function pct(from, to) {
+      if (!from || !to || from === 0) return null;
+      return ((to - from) / from) * 100;
+    }
 
-    // Build historical trend for total revenue
-    const revenueTrend = history.map(p => ({
-      period: p.period?.slice(0, 7) || '—',
-      total:  Object.values(p.product || {}).reduce((s, v) => s + (v || 0), 0),
-    })).reverse();
+    // 1 day: use quote's prev close
+    const change1d = quote?.dp ?? null;
+
+    // 5 days: 5 trading days back in 1m candle
+    const price5d   = closeNDaysBack(candle1m, 5);
+    const change5d  = pct(price5d, currentPrice);
+
+    // 1 month
+    const price1m   = firstClose(candle1m);
+    const change1m  = pct(price1m, currentPrice);
+
+    // 6 months
+    const price6m   = firstClose(candle6m);
+    const change6m  = pct(price6m, currentPrice);
+
+    // YTD
+    const priceYtd  = firstClose(candleYtd);
+    const changeYtd = pct(priceYtd, currentPrice);
+
+    // 1 year
+    const price1y   = firstClose(candle1y);
+    const change1y  = pct(price1y, currentPrice);
+
+    // 5 years
+    const price5y   = firstClose(candle5y);
+    const change5y  = pct(price5y, currentPrice);
+
+    // 10 years
+    const price10y  = firstClose(candle10y);
+    const change10y = pct(price10y, currentPrice);
 
     const result = {
-      symbol:          symbol.toUpperCase(),
-      latestPeriod:    latest.period,
-      productSegments,
-      geoSegments,
-      revenueTrend,
+      symbol: sym,
+      currentPrice,
+      periods: [
+        { label: '1 day',      key: '1d',  change: change1d  },
+        { label: '5 days',     key: '5d',  change: change5d  },
+        { label: '1 month',    key: '1m',  change: change1m  },
+        { label: '6 months',   key: '6m',  change: change6m  },
+        { label: 'Year to date', key: 'ytd', change: changeYtd },
+        { label: '1 year',     key: '1y',  change: change1y  },
+        { label: '5 years',    key: '5y',  change: change5y  },
+        { label: '10 years',   key: '10y', change: change10y },
+      ],
     };
 
-    cache.set(cacheKey, result, 3600);
+    cache.set(cacheKey, result, 300); // cache 5 minutes
     res.json(result);
 
   } catch (e) {
-    console.error('/api/revenue-breakdown error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch revenue breakdown' });
-  }
-});
-
-// ── M&A Data (Finnhub — free tier) ───────────────────────────────────────────
-// GET /api/mergers?symbol=AAPL
-// Returns merger and acquisition activity for a company
-app.get('/api/mergers', async (req, res) => {
-  const { symbol } = req.query;
-  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
-
-  const cacheKey = `mergers_${symbol.toUpperCase()}`;
-  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
-
-  try {
-    const data = await finnhub('/stock/merger', {
-      symbol: symbol.toUpperCase(),
-    });
-
-    const mergers = data?.mergersList || data?.data || data || [];
-
-    if (!Array.isArray(mergers) || mergers.length === 0) {
-      return res.json({ error: 'no_data' });
-    }
-
-    // Sort by date descending, take most recent 15
-    const sorted = mergers
-      .filter(m => m.symbol || m.name || m.companyName)
-      .sort((a, b) => new Date(b.date || b.announcedDate || 0) - new Date(a.date || a.announcedDate || 0))
-      .slice(0, 15)
-      .map(m => ({
-        name:         m.name           || m.companyName       || '—',
-        symbol:       m.symbol         || m.targetSymbol       || null,
-        type:         m.type           || m.transactionType    || 'Acquisition',
-        status:       m.status         || 'Unknown',
-        date:         m.date           || m.announcedDate      || null,
-        closedDate:   m.closedDate     || m.completionDate     || null,
-        value:        m.value          || m.dealValue          || null,
-        currency:     m.currency       || 'USD',
-        acquirer:     m.acquirer       || m.acquirerName       || null,
-        target:       m.target         || m.targetName         || m.name || '—',
-        exchange:     m.exchange       || null,
-      }));
-
-    const result = {
-      symbol:  symbol.toUpperCase(),
-      total:   sorted.length,
-      mergers: sorted,
-    };
-
-    cache.set(cacheKey, result, 3600);
-    res.json(result);
-
-  } catch (e) {
-    console.error('/api/mergers error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch M&A data' });
+    console.error('/api/performance error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch performance data' });
   }
 });
 
