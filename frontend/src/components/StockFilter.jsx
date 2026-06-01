@@ -607,7 +607,7 @@ export const COUNTRIES = [...new Map(
 export const INDUSTRIES = [...new Set(UNIVERSE.map(s => s.industry))].sort();
 
 export default function StockFilter({ selected, onSelect }) {
-  const [activeCountry,  setActiveCountry]  = useState('US');
+  const [activeCountry,  setActiveCountry]  = useState(null);
   const [activeIndustry, setActiveIndustry] = useState(null);
 
   const filtered = UNIVERSE.filter(s => {
