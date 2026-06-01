@@ -618,204 +618,82 @@ app.get('/api/esg', async (req, res) => {
 });
 
 
-// ── Patent Filings (USPTO PatentsView — free, no key) ─────────────────────────
-// GET /api/patents?company=Apple+Inc&symbol=AAPL
-// Returns recent granted patents and filing trends
-app.get('/api/patents', async (req, res) => {
-  const { company, symbol } = req.query;
-  if (!company) return res.status(400).json({ error: 'company is required' });
-
-  const cacheKey = `patents_${symbol || company}`;
-  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
-
-  try {
-    // Strip common suffixes for better matching
-    const searchName = company
-      .replace(/\b(inc|corp|corporation|ltd|llc|co|company|technologies|systems|group|holdings?)\b\.?/gi, '')
-      .replace(/,\s*$/, '')
-      .trim();
-
-    // Fetch recent patents granted in last 2 years
-    const twoYearsAgo = new Date();
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    const dateStr = twoYearsAgo.toISOString().slice(0, 10);
-
-    const [recentRes, totalRes] = await Promise.all([
-      // Recent patents with details
-      axios.post('https://api.patentsview.org/patents/query', {
-        q: {
-          _and: [
-            { _contains: { assignee_organization: searchName } },
-            { _gte: { patent_date: dateStr } },
-          ],
-        },
-        f: [
-          'patent_number', 'patent_title', 'patent_date',
-          'patent_abstract', 'patent_type', 'assignee_organization',
-          'cpc_category',
-        ],
-        o: { per_page: 10, sort: [{ patent_date: 'desc' }] },
-      }, { timeout: 15000 }),
-
-      // Total count all time
-      axios.post('https://api.patentsview.org/patents/query', {
-        q: { _contains: { assignee_organization: searchName } },
-        f: ['patent_number'],
-        o: { per_page: 1 },
-      }, { timeout: 15000 }),
-    ]);
-
-    const recent = recentRes.data?.patents || [];
-    const totalCount = totalRes.data?.total_patent_count || 0;
-    const recentCount = recentRes.data?.total_patent_count || 0;
-
-    if (totalCount === 0) {
-      return res.json({ error: 'no_data' });
-    }
-
-    // Group recent patents by category
-    const categoryMap = {};
-    recent.forEach(p => {
-      const cats = p.cpc_category || [];
-      const cat = Array.isArray(cats) && cats.length > 0 ? cats[0] : 'Other';
-      categoryMap[cat] = (categoryMap[cat] || 0) + 1;
-    });
-
-    const result = {
-      searchName,
-      totalPatents:  totalCount,
-      recentPatents: recentCount,
-      patents: recent.map(p => ({
-        number:    p.patent_number,
-        title:     p.patent_title,
-        date:      p.patent_date,
-        abstract:  p.patent_abstract?.slice(0, 200) + (p.patent_abstract?.length > 200 ? '…' : '') || null,
-        type:      p.patent_type,
-        assignee:  Array.isArray(p.assignee_organization) ? p.assignee_organization[0] : p.assignee_organization,
-        categories: Array.isArray(p.cpc_category) ? p.cpc_category.slice(0, 3) : [],
-        url: `https://patents.google.com/patent/US${p.patent_number}`,
-      })),
-      topCategories: Object.entries(categoryMap)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5),
-    };
-
-    cache.set(cacheKey, result, 3600); // cache 1 hour
-    res.json(result);
-
-  } catch (e) {
-    console.error('/api/patents error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch patent data' });
-  }
-});
-
-// ── Congressional Trading (House Stock Watcher + Senate Stock Watcher) ─────────
-// GET /api/congress-trades?symbol=AAPL
-// Returns trades by House reps and Senators for a given ticker — free, no key
-app.get('/api/congress-trades', async (req, res) => {
+// ── ROE History (Finnhub metric series — free tier) ───────────────────────────
+// GET /api/roe-history?symbol=AAPL
+// Returns annual ROE + related profitability metrics over time
+app.get('/api/roe-history', async (req, res) => {
   const { symbol } = req.query;
   if (!symbol) return res.status(400).json({ error: 'symbol is required' });
 
-  const sym = symbol.toUpperCase();
-  const cacheKey = `congress_${sym}`;
+  const cacheKey = `roe_${symbol.toUpperCase()}`;
   if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
 
   try {
-    // Fetch House and Senate data in parallel
-    const [houseRes, senateRes] = await Promise.allSettled([
-      axios.get('https://housestockwatcher.com/api/transactions_by_ticker/' + sym, {
-        timeout: 10000,
-        headers: { 'User-Agent': 'StockDashboard/1.0' },
-      }),
-      axios.get('https://efdsearch.senate.gov/search/report/data/', {
-        params: {
-          search_type: 'annual',
-          filer_type:  'senator',
-          submitted_start_date: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
-            .toISOString().slice(0, 10),
-        },
-        timeout: 10000,
-        headers: { 'User-Agent': 'StockDashboard/1.0' },
-      }),
-    ]);
+    const data = await finnhub('/stock/metric', {
+      symbol: symbol.toUpperCase(),
+      metric: 'all',
+    });
 
-    // Process House trades
-    const houseTrades = houseRes.status === 'fulfilled'
-      ? (Array.isArray(houseRes.value.data) ? houseRes.value.data : [])
-          .map(t => ({
-            chamber:         'House',
-            member:          t.representative,
-            party:           t.party || null,
-            district:        t.district || null,
-            ticker:          t.ticker,
-            assetDescription: t.asset_description || null,
-            type:            t.type,            // Purchase / Sale / Exchange
-            amount:          t.amount,          // e.g. "$1,001 - $15,000"
-            transactionDate: t.transaction_date,
-            disclosureDate:  t.disclosure_date,
-            url:             t.cap_gains_over_200_usd != null
-              ? 'https://disclosures-clerk.house.gov/PublicDisclosure/FinancialDisclosure'
-              : null,
-          }))
-          .filter(t => t.ticker === sym)
-          .slice(0, 20)
-      : [];
+    const series = data?.series?.annual;
 
-    // Process Senate — EFD returns HTML, so we fall back to known JSON endpoint
-    // Use senatestockwatcher aggregated JSON instead
-    let senateTrades = [];
-    try {
-      const swRes = await axios.get(
-        `https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions_for_ticker_${sym}.json`,
-        { timeout: 10000, headers: { 'User-Agent': 'StockDashboard/1.0' } }
-      );
-      senateTrades = (Array.isArray(swRes.data) ? swRes.data : [])
-        .map(t => ({
-          chamber:         'Senate',
-          member:          `${t.first_name} ${t.last_name}`,
-          party:           null,
-          district:        t.office || null,
-          ticker:          sym,
-          assetDescription: t.asset_description || null,
-          type:             t.type,
-          amount:           t.amount,
-          transactionDate:  t.transaction_date,
-          disclosureDate:   t.date_recieved,
-          url: t.ptr_link || null,
-        }))
-        .slice(0, 20);
-    } catch {
-      // Senate data not available for this ticker
-    }
-
-    const allTrades = [...houseTrades, ...senateTrades]
-      .sort((a, b) => new Date(b.transactionDate || 0) - new Date(a.transactionDate || 0));
-
-    if (allTrades.length === 0) {
+    if (!series) {
       return res.json({ error: 'no_data' });
     }
 
-    // Summary stats
-    const purchases = allTrades.filter(t => t.type?.toLowerCase().includes('purchase')).length;
-    const sales     = allTrades.filter(t => t.type?.toLowerCase().includes('sale')).length;
-    const members   = [...new Set(allTrades.map(t => t.member))];
+    // Extract and align all profitability series by period
+    const roeSeries        = series.roe        || [];
+    const roaSeries        = series.roa        || [];
+    const netMarginSeries  = series.netMargin  || [];
+    const grossMarginSeries = series.grossMargin || [];
+    const revenueGrowthSeries = series.revenueGrowth || [];
+
+    // Build a unified timeline from ROE periods
+    const periods = roeSeries
+      .map(p => p.period)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a) - new Date(b));
+
+    if (periods.length === 0) {
+      return res.json({ error: 'no_data' });
+    }
+
+    // Helper to find value for a period
+    function findVal(seriesArr, period) {
+      const match = seriesArr.find(p => p.period === period);
+      return match?.v != null ? Math.round(match.v * 100) / 100 : null;
+    }
+
+    const timeline = periods.map(period => ({
+      period,
+      year:         period.slice(0, 4),
+      roe:          findVal(roeSeries, period),
+      roa:          findVal(roaSeries, period),
+      netMargin:    findVal(netMarginSeries, period),
+      grossMargin:  findVal(grossMarginSeries, period),
+      revenueGrowth: findVal(revenueGrowthSeries, period),
+    })).filter(d => d.roe != null); // only include years with ROE data
+
+    if (timeline.length === 0) {
+      return res.json({ error: 'no_data' });
+    }
 
     const result = {
-      symbol:      sym,
-      totalTrades: allTrades.length,
-      purchases,
-      sales,
-      uniqueMembers: members.length,
-      trades:      allTrades,
+      symbol:   symbol.toUpperCase(),
+      timeline, // array of { period, year, roe, roa, netMargin, grossMargin, revenueGrowth }
+      current: {
+        roe:         data.metric?.roeTTM          ?? null,
+        roa:         data.metric?.roaTTM          ?? null,
+        netMargin:   data.metric?.netProfitMarginTTM ?? null,
+        grossMargin: data.metric?.grossMarginTTM  ?? null,
+      },
     };
 
-    cache.set(cacheKey, result, 1800); // cache 30 min
+    cache.set(cacheKey, result, 3600);
     res.json(result);
 
   } catch (e) {
-    console.error('/api/congress-trades error:', e.message);
-    res.status(500).json({ error: 'Failed to fetch congressional trading data' });
+    console.error('/api/roe-history error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch ROE history' });
   }
 });
 
