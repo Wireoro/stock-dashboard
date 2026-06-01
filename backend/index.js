@@ -660,7 +660,9 @@ app.get('/api/roe-history', async (req, res) => {
     // Helper to find value for a period
     function findVal(seriesArr, period) {
       const match = seriesArr.find(p => p.period === period);
-      return match?.v != null ? Math.round(match.v * 100) / 100 : null;
+      if (match?.v == null) return null;
+      // Finnhub stores ratios as decimals (0.15 = 15%) — multiply by 100
+      return Math.round(match.v * 100 * 100) / 100;
     }
 
     const timeline = periods.map(period => ({
@@ -681,10 +683,11 @@ app.get('/api/roe-history', async (req, res) => {
       symbol:   symbol.toUpperCase(),
       timeline, // array of { period, year, roe, roa, netMargin, grossMargin, revenueGrowth }
       current: {
-        roe:         data.metric?.roeTTM          ?? null,
-        roa:         data.metric?.roaTTM          ?? null,
-        netMargin:   data.metric?.netProfitMarginTTM ?? null,
-        grossMargin: data.metric?.grossMarginTTM  ?? null,
+        // TTM values from /stock/metric are already in % — no conversion needed
+        roe:         data.metric?.roeTTM              ?? null,
+        roa:         data.metric?.roaTTM              ?? null,
+        netMargin:   data.metric?.netProfitMarginTTM  ?? null,
+        grossMargin: data.metric?.grossMarginTTM      ?? null,
       },
     };
 
