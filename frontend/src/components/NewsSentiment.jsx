@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 
 function sentimentColor(score) {
-  if (score >=  0.35) return '#00d4a0';
-  if (score >=  0.1)  return '#4ade80';
+  if (score >=  0.35) return '#C4654A';
+  if (score >=  0.1)  return '#A8523A';
   if (score >= -0.1)  return '#facc15';
   if (score >= -0.35) return '#f97316';
   return '#f05252';
@@ -63,7 +63,7 @@ export default function NewsSentiment({ symbol }) {
   const label = sentimentLabel(companyScore ?? 0);
 
   const trendDir = score7d > companyScore ? '↑' : score7d < companyScore ? '↓' : '→';
-  const trendColor = score7d > companyScore ? '#00d4a0' : score7d < companyScore ? '#f05252' : '#facc15';
+  const trendColor = score7d > companyScore ? '#C4654A' : score7d < companyScore ? '#f05252' : '#facc15';
 
   return (
     <Card>
@@ -95,8 +95,8 @@ export default function NewsSentiment({ symbol }) {
           <div style={{ ...styles.zone, left: '0%',  width: '20%', background: '#f0525222' }} />
           <div style={{ ...styles.zone, left: '20%', width: '20%', background: '#f9731622' }} />
           <div style={{ ...styles.zone, left: '40%', width: '20%', background: '#facc1522' }} />
-          <div style={{ ...styles.zone, left: '60%', width: '20%', background: '#4ade8022' }} />
-          <div style={{ ...styles.zone, left: '80%', width: '20%', background: '#00d4a022' }} />
+          <div style={{ ...styles.zone, left: '60%', width: '20%', background: '#A8523A22' }} />
+          <div style={{ ...styles.zone, left: '80%', width: '20%', background: '#C4654A22' }} />
           <div style={{ ...styles.gaugeThumb, left: `${pct}%`, background: color }} />
         </div>
         <div style={styles.gaugeLabels}>
@@ -108,7 +108,7 @@ export default function NewsSentiment({ symbol }) {
       <div style={styles.grid}>
         {[
           { label: 'Articles (30d)',   value: articlesProcessed },
-          { label: 'Positive',         value: breakdown?.positive, color: '#00d4a0' },
+          { label: 'Positive',         value: breakdown?.positive, color: '#C4654A' },
           { label: 'Neutral',          value: breakdown?.neutral,  color: '#facc15' },
           { label: 'Negative',         value: breakdown?.negative, color: '#f05252' },
           { label: 'Weekly avg',       value: buzz?.weeklyAverage },
@@ -127,7 +127,7 @@ export default function NewsSentiment({ symbol }) {
           <span style={styles.buzzLabel}>News volume change vs 30-day avg</span>
           <span style={{
             ...styles.buzzValue,
-            color: buzz.buzzChange >= 0 ? '#00d4a0' : '#f05252',
+            color: buzz.buzzChange >= 0 ? '#C4654A' : '#f05252',
           }}>
             {buzz.buzzChange >= 0 ? '+' : ''}{(buzz.buzzChange * 100).toFixed(1)}%
           </span>

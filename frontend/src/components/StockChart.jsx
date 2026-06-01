@@ -55,7 +55,7 @@ export default function StockChart({ symbol }) {
   }, [symbol, range]);
 
   const isUp = data.length >= 2 && data[data.length - 1].close >= data[0].close;
-  const color = isUp ? '#00d4a0' : '#f05252';
+  const color = isUp ? '#C4654A' : '#f05252';
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -79,9 +79,9 @@ export default function StockChart({ symbol }) {
               key={r.label}
               style={{
                 ...styles.rangeBtn,
-                background: r.label === range.label ? 'rgba(0,212,160,0.12)' : 'transparent',
+                background: r.label === range.label ? 'rgba(196,101,74,0.1)' : 'transparent',
                 color: r.label === range.label ? 'var(--accent)' : 'var(--muted)',
-                border: r.label === range.label ? '1px solid rgba(0,212,160,0.3)' : '1px solid transparent',
+                border: r.label === range.label ? '1px solid rgba(196,101,74,0.3)' : '1px solid transparent',
               }}
               onClick={() => setRange(r)}
             >

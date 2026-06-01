@@ -15,7 +15,7 @@ function RelationCard({ company, type, onSelect }) {
   }, [company.symbol]);
 
   const isUp    = quote && (quote.dp ?? 0) >= 0;
-  const color   = isUp ? '#00d4a0' : '#f05252';
+  const color   = isUp ? '#C4654A' : '#f05252';
   const typeColor = type === 'supplier' ? '#6366f1' : '#f59e0b';
   const typeLabel = type === 'supplier' ? '↑ Supplier' : '↓ Customer';
 
@@ -174,7 +174,7 @@ const styles = {
   flowCenter: {
     width: 64, height: 64, borderRadius: '50%',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'rgba(0,212,160,0.08)', flexShrink: 0,
+    background: 'rgba(196,101,74,0.07)', flexShrink: 0,
   },
   flowSymbol: { fontFamily: 'var(--font-mono)', fontSize: '0.75rem', fontWeight: 700, color: 'var(--accent)' },
   grid: {

@@ -116,7 +116,7 @@ const styles = {
     fontSize: '0.75rem',
     color: 'var(--accent)',
     textDecoration: 'none',
-    border: '1px solid rgba(0,212,160,0.25)',
+    border: '1px solid rgba(196,101,74,0.25)',
     padding: '4px 10px',
     borderRadius: 5,
   },

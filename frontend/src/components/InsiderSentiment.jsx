@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 
 function scoreLabel(score) {
-  if (score >= 80) return { label: 'Very Bullish',  color: '#00d4a0' };
-  if (score >= 60) return { label: 'Bullish',       color: '#4ade80' };
+  if (score >= 80) return { label: 'Very Bullish',  color: '#C4654A' };
+  if (score >= 60) return { label: 'Bullish',       color: '#A8523A' };
   if (score >= 40) return { label: 'Neutral',       color: '#facc15' };
   if (score >= 20) return { label: 'Bearish',       color: '#f97316' };
   return               { label: 'Very Bearish',  color: '#f05252' };
@@ -63,7 +63,7 @@ export default function InsiderSentiment({ symbol }) {
           <div style={{
             ...styles.gaugeFill,
             width: `${score}%`,
-            background: `linear-gradient(90deg, #f05252, #facc15 50%, #00d4a0)`,
+            background: `linear-gradient(90deg, #f05252, #facc15 50%, #C4654A)`,
             clipPath: `inset(0 ${100 - score}% 0 0)`,
           }} />
           <div style={{ ...styles.gaugeThumb, left: `${score}%`, borderColor: color }} />
@@ -77,11 +77,11 @@ export default function InsiderSentiment({ symbol }) {
 
       {/* Buy vs Sell summary */}
       <div style={styles.splitBar}>
-        <div style={{ ...styles.splitFill, width: `${buyPct}%`, background: '#00d4a0' }} />
+        <div style={{ ...styles.splitFill, width: `${buyPct}%`, background: '#C4654A' }} />
         <div style={{ ...styles.splitFill, width: `${sellPct}%`, background: '#f05252' }} />
       </div>
       <div style={styles.splitLabels}>
-        <span style={{ color: '#00d4a0' }}>
+        <span style={{ color: '#C4654A' }}>
           ▲ Buys {fmtVal(totalBuyValue)} ({totalBuyers} insiders)
         </span>
         <span style={{ color: '#f05252' }}>
@@ -94,7 +94,7 @@ export default function InsiderSentiment({ symbol }) {
         <span style={styles.netLabel}>Net shares (3 months)</span>
         <span style={{
           ...styles.netValue,
-          color: netShares >= 0 ? '#00d4a0' : '#f05252',
+          color: netShares >= 0 ? '#C4654A' : '#f05252',
         }}>
           {netShares >= 0 ? '+' : ''}{netShares?.toLocaleString()} shares
         </span>
@@ -115,9 +115,9 @@ export default function InsiderSentiment({ symbol }) {
                 <div style={styles.txRight}>
                   <span style={{
                     ...styles.txBadge,
-                    background: isBuy ? 'rgba(0,212,160,0.1)' : 'rgba(240,82,82,0.1)',
-                    color: isBuy ? '#00d4a0' : '#f05252',
-                    border: `1px solid ${isBuy ? 'rgba(0,212,160,0.3)' : 'rgba(240,82,82,0.3)'}`,
+                    background: isBuy ? 'rgba(196,101,74,0.08)' : 'rgba(240,82,82,0.1)',
+                    color: isBuy ? '#C4654A' : '#f05252',
+                    border: `1px solid ${isBuy ? 'rgba(196,101,74,0.3)' : 'rgba(240,82,82,0.3)'}`,
                   }}>
                     {isBuy ? '▲ BUY' : '▼ SELL'}
                   </span>

@@ -21,8 +21,8 @@ export default function Analysts({ symbol }) {
                  (latest.hold || 0) + (latest.sell || 0) + (latest.strongSell || 0);
 
   const ratings = [
-    { label: 'Strong buy',  count: latest.strongBuy  || 0, color: '#00d4a0' },
-    { label: 'Buy',         count: latest.buy        || 0, color: '#4ade80' },
+    { label: 'Strong buy',  count: latest.strongBuy  || 0, color: '#C4654A' },
+    { label: 'Buy',         count: latest.buy        || 0, color: '#A8523A' },
     { label: 'Hold',        count: latest.hold       || 0, color: '#facc15' },
     { label: 'Sell',        count: latest.sell       || 0, color: '#f97316' },
     { label: 'Strong sell', count: latest.strongSell || 0, color: '#f05252' },
@@ -36,7 +36,7 @@ export default function Analysts({ symbol }) {
     : bearish > bullish * 2 ? 'Strong sell'
     : bearish > bullish ? 'Sell'
     : 'Hold';
-  const consensusColor = ['Strong buy', 'Buy'].includes(consensus) ? '#00d4a0'
+  const consensusColor = ['Strong buy', 'Buy'].includes(consensus) ? '#C4654A'
     : ['Strong sell', 'Sell'].includes(consensus) ? '#f05252'
     : '#facc15';
 
@@ -80,7 +80,7 @@ export default function Analysts({ symbol }) {
           {data.slice(1).map((r, i) => (
             <div key={i} style={styles.histRow}>
               <span style={styles.histPeriod}>{r.period}</span>
-              <span style={{ color: '#00d4a0', fontSize: '0.78rem', fontFamily: 'var(--font-mono)' }}>
+              <span style={{ color: '#C4654A', fontSize: '0.78rem', fontFamily: 'var(--font-mono)' }}>
                 ▲ {(r.strongBuy || 0) + (r.buy || 0)}
               </span>
               <span style={{ color: '#facc15', fontSize: '0.78rem', fontFamily: 'var(--font-mono)' }}>

@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 
 function sentimentColor(score) {
-  if (score >=  0.35) return '#00d4a0';
-  if (score >=  0.1)  return '#4ade80';
+  if (score >=  0.35) return '#C4654A';
+  if (score >=  0.1)  return '#A8523A';
   if (score >= -0.1)  return '#facc15';
   if (score >= -0.35) return '#f97316';
   return '#f05252';
@@ -141,12 +141,12 @@ export default function SocialSentiment({ symbol }) {
           {/* Sentiment split bar */}
           <p style={styles.subLabel}>SENTIMENT SPLIT</p>
           <div style={styles.sentBar}>
-            <div style={{ width: `${mentions?.positive ?? 33}%`, background: '#00d4a0', height: '100%', borderRadius: '4px 0 0 4px' }} />
+            <div style={{ width: `${mentions?.positive ?? 33}%`, background: '#C4654A', height: '100%', borderRadius: '4px 0 0 4px' }} />
             <div style={{ width: `${100 - (mentions?.positive ?? 33) - (mentions?.negative ?? 33)}%`, background: '#facc15', height: '100%' }} />
             <div style={{ width: `${mentions?.negative ?? 33}%`, background: '#f05252', height: '100%', borderRadius: '0 4px 4px 0' }} />
           </div>
           <div style={styles.barLegend}>
-            <span style={{ color: '#00d4a0' }}>▲ Bullish {mentions?.positive ?? '—'}%</span>
+            <span style={{ color: '#C4654A' }}>▲ Bullish {mentions?.positive ?? '—'}%</span>
             <span style={{ color: '#facc15' }}>— Neutral</span>
             <span style={{ color: '#f05252' }}>▼ Bearish {mentions?.negative ?? '—'}%</span>
           </div>

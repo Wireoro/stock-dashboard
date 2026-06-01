@@ -21,11 +21,11 @@ function SentimentBar({ bullish, bearish }) {
   return (
     <div>
       <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 5 }}>
-        <div style={{ width: `${bPct}%`, background: '#00d4a0', transition: 'width 0.5s' }} />
+        <div style={{ width: `${bPct}%`, background: '#C4654A', transition: 'width 0.5s' }} />
         <div style={{ width: `${rPct}%`, background: '#f05252', transition: 'width 0.5s' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>
-        <span style={{ color: '#00d4a0' }}>▲ Bullish {bPct}% ({bullish})</span>
+        <span style={{ color: '#C4654A' }}>▲ Bullish {bPct}% ({bullish})</span>
         <span style={{ color: '#f05252' }}>▼ Bearish {rPct}% ({bearish})</span>
       </div>
     </div>
@@ -57,8 +57,8 @@ export default function StockTwits({ symbol }) {
 
   const { bullish, bearish, total, watchlistCount, messages } = data;
   const bPct = total > 0 ? Math.round((bullish / total) * 100) : 0;
-  const overallSentiment = bPct >= 65 ? { label: 'Very Bullish',  color: '#00d4a0' }
-    : bPct >= 55 ? { label: 'Bullish',       color: '#4ade80' }
+  const overallSentiment = bPct >= 65 ? { label: 'Very Bullish',  color: '#C4654A' }
+    : bPct >= 55 ? { label: 'Bullish',       color: '#A8523A' }
     : bPct >= 45 ? { label: 'Neutral',        color: '#facc15' }
     : bPct >= 35 ? { label: 'Bearish',        color: '#f97316' }
     :              { label: 'Very Bearish',   color: '#f05252' };
@@ -115,7 +115,7 @@ export default function StockTwits({ symbol }) {
             <div style={styles.statsColumn}>
               {[
                 { label: 'Total messages',  value: total?.toLocaleString() },
-                { label: 'Bullish',         value: bullish?.toLocaleString(), color: '#00d4a0' },
+                { label: 'Bullish',         value: bullish?.toLocaleString(), color: '#C4654A' },
                 { label: 'Bearish',         value: bearish?.toLocaleString(), color: '#f05252' },
                 { label: 'Watchlisted by',  value: watchlistCount ? `${watchlistCount?.toLocaleString()} traders` : '—' },
               ].map(({ label, value, color: c }) => (
@@ -145,7 +145,7 @@ export default function StockTwits({ symbol }) {
           {messages?.length > 0 ? messages.map((msg, i) => {
             const isBull = msg.sentiment === 'Bullish';
             const isBear = msg.sentiment === 'Bearish';
-            const sentColor = isBull ? '#00d4a0' : isBear ? '#f05252' : '#facc15';
+            const sentColor = isBull ? '#C4654A' : isBear ? '#f05252' : '#facc15';
             const sentIcon  = isBull ? '▲' : isBear ? '▼' : '—';
 
             return (

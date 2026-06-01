@@ -11,7 +11,7 @@ function fmtDollars(n) {
 }
 
 function agencyColor(i) {
-  const colors = ['#00d4a0','#6366f1','#f59e0b','#3b82f6','#ec4899','#8b5cf6','#10b981','#f97316'];
+  const colors = ['#C4654A','#6366f1','#f59e0b','#3b82f6','#ec4899','#8b5cf6','#10b981','#f97316'];
   return colors[i % colors.length];
 }
 
@@ -254,7 +254,7 @@ function Card({ children }) {
 const styles = {
   header:       { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' },
   sectionLabel: { fontFamily: 'var(--font-mono)', fontSize: '0.65rem', letterSpacing: '0.12em', color: 'var(--muted)' },
-  sourceLink:   { fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--accent)', textDecoration: 'none', border: '1px solid rgba(0,212,160,0.25)', padding: '3px 9px', borderRadius: 5, flexShrink: 0 },
+  sourceLink:   { fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--accent)', textDecoration: 'none', border: '1px solid rgba(196,101,74,0.25)', padding: '3px 9px', borderRadius: 5, flexShrink: 0 },
   summaryGrid:  { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1px', background: 'var(--border)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: '1.25rem' },
   summaryItem:  { background: 'var(--surface2)', padding: '0.75rem 0.9rem', display: 'flex', flexDirection: 'column', gap: 4 },
   summaryLabel: { fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },

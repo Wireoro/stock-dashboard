@@ -6,8 +6,8 @@ const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 // 0-10: Negligible, 10-20: Low, 20-30: Medium, 30-40: High, 40+: Severe
 function riskColor(score) {
   if (score == null) return 'var(--muted)';
-  if (score < 10)  return '#00d4a0';
-  if (score < 20)  return '#4ade80';
+  if (score < 10)  return '#C4654A';
+  if (score < 20)  return '#A8523A';
   if (score < 30)  return '#facc15';
   if (score < 40)  return '#f97316';
   return '#f05252';
@@ -48,8 +48,8 @@ function PillarBar({ label, score, icon }) {
 }
 
 const CONTROVERSY_COLORS = {
-  'None':        '#00d4a0',
-  'Low':         '#4ade80',
+  'None':        '#C4654A',
+  'Low':         '#A8523A',
   'Moderate':    '#facc15',
   'Significant': '#f97316',
   'High':        '#f05252',
@@ -146,7 +146,7 @@ export default function ESGScore({ symbol }) {
       <div style={styles.scaleNote}>
         <span style={styles.scaleIcon}>ℹ</span>
         <span style={styles.scaleText}>
-          Sustainalytics scale: <strong style={{ color: '#00d4a0' }}>lower score = less ESG risk</strong>.
+          Sustainalytics scale: <strong style={{ color: '#C4654A' }}>lower score = less ESG risk</strong>.
           Scores below 10 are negligible, above 40 are severe.
         </span>
       </div>

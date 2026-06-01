@@ -57,9 +57,9 @@ export default function Insiders({ symbol }) {
               <span style={{ ...styles.td, textAlign: 'center' }}>
                 <span style={{
                   ...styles.badge,
-                  background: isBuy ? 'rgba(0,212,160,0.12)' : 'rgba(240,82,82,0.12)',
+                  background: isBuy ? 'rgba(196,101,74,0.1)' : 'rgba(240,82,82,0.12)',
                   color: isBuy ? 'var(--green)' : 'var(--red)',
-                  border: `1px solid ${isBuy ? 'rgba(0,212,160,0.3)' : 'rgba(240,82,82,0.3)'}`,
+                  border: `1px solid ${isBuy ? 'rgba(196,101,74,0.3)' : 'rgba(240,82,82,0.3)'}`,
                 }}>
                   {isBuy ? '▲ Buy' : '▼ Sell'}
                 </span>
