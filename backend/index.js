@@ -210,7 +210,7 @@ app.get('/api/gov-spending', async (req, res) => {
                 end_date:   `${year}-09-30`,
               }],
             },
-            fields:  ['Award Amount', 'Awarding Agency', 'Description', 'Action Date', 'Recipient Name', 'generated_unique_award_id'],
+            fields:  ['Award Amount', 'Awarding Agency', 'Description', 'Action Date', 'Recipient Name'],
             sort:    'Award Amount',
             order:   'desc',
             limit:   15,
@@ -263,10 +263,6 @@ app.get('/api/gov-spending', async (req, res) => {
         agency:      r['Awarding Agency'] || '—',
         amount:      r['Award Amount']    || 0,
         date:        r['Action Date']     || '—',
-        awardId:     r['generated_unique_award_id'] || null,
-        url: r['generated_unique_award_id']
-          ? 'https://www.usaspending.gov/award/' + encodeURIComponent(r['generated_unique_award_id']) + '/'
-          : null,
       })),
       yearOverYear: yearResults.map(y => ({
         year:   y.year,
@@ -618,6 +614,75 @@ app.get('/api/esg', async (req, res) => {
     }
     console.error('/api/esg error:', e.message);
     res.status(500).json({ error: 'Failed to fetch ESG data' });
+  }
+});
+
+
+// ── ROE History (Finnhub metric series — free tier) ───────────────────────────
+// GET /api/roe-history?symbol=AAPL
+app.get('/api/roe-history', async (req, res) => {
+  const { symbol } = req.query;
+  if (!symbol) return res.status(400).json({ error: 'symbol is required' });
+
+  const cacheKey = `roe_${symbol.toUpperCase()}`;
+  if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
+  try {
+    const data = await finnhub('/stock/metric', {
+      symbol: symbol.toUpperCase(),
+      metric: 'all',
+    });
+
+    const series = data?.series?.annual;
+    if (!series) return res.json({ error: 'no_data' });
+
+    const roeSeries         = series.roe         || [];
+    const roaSeries         = series.roa         || [];
+    const netMarginSeries   = series.netMargin   || [];
+    const grossMarginSeries = series.grossMargin || [];
+
+    const periods = roeSeries
+      .map(p => p.period)
+      .filter(Boolean)
+      .sort((a, b) => new Date(a) - new Date(b));
+
+    if (periods.length === 0) return res.json({ error: 'no_data' });
+
+    function findVal(seriesArr, period) {
+      const match = seriesArr.find(p => p.period === period);
+      if (match?.v == null) return null;
+      // Finnhub stores as decimals (0.15 = 15%) — multiply by 100
+      return Math.round(match.v * 100 * 100) / 100;
+    }
+
+    const timeline = periods.map(period => ({
+      period,
+      year:        period.slice(0, 4),
+      roe:         findVal(roeSeries, period),
+      roa:         findVal(roaSeries, period),
+      netMargin:   findVal(netMarginSeries, period),
+      grossMargin: findVal(grossMarginSeries, period),
+    })).filter(d => d.roe != null);
+
+    if (timeline.length === 0) return res.json({ error: 'no_data' });
+
+    const result = {
+      symbol: symbol.toUpperCase(),
+      timeline,
+      current: {
+        roe:         data.metric?.roeTTM             ?? null,
+        roa:         data.metric?.roaTTM             ?? null,
+        netMargin:   data.metric?.netProfitMarginTTM ?? null,
+        grossMargin: data.metric?.grossMarginTTM     ?? null,
+      },
+    };
+
+    cache.set(cacheKey, result, 3600);
+    res.json(result);
+
+  } catch (e) {
+    console.error('/api/roe-history error:', e.message);
+    res.status(500).json({ error: 'Failed to fetch ROE history' });
   }
 });
 
