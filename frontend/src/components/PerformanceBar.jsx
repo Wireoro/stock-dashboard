@@ -5,8 +5,7 @@ const API = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
 function formatPct(val) {
   if (val == null) return '—';
   const abs = Math.abs(val);
-  // Show as K if over 1000%
-  if (abs >= 1000) return `${(val / 1000).toFixed(2)}K%`;
+  if (abs >= 1000) return `${val >= 0 ? '+' : ''}${(val / 1000).toFixed(2)}K%`;
   return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`;
 }
 
@@ -26,14 +25,12 @@ export default function PerformanceBar({ symbol }) {
 
   if (loading || !data) return null;
 
-  const { periods } = data;
-
   return (
     <div style={styles.wrap}>
-      {periods.map(p => {
-        const isActive  = active === p.key;
-        const isPos     = p.change != null && p.change >= 0;
-        const isNeg     = p.change != null && p.change < 0;
+      {data.periods.map(p => {
+        const isActive   = active === p.key;
+        const isPos      = p.change != null && p.change >= 0;
+        const isNeg      = p.change != null && p.change < 0;
         const changeColor = isPos ? 'var(--green)' : isNeg ? 'var(--red)' : 'var(--muted)';
 
         return (
@@ -41,14 +38,14 @@ export default function PerformanceBar({ symbol }) {
             key={p.key}
             style={{
               ...styles.cell,
-              background:   isActive ? 'var(--surface2)' : 'transparent',
-              borderColor:  isActive ? 'var(--border2)'  : 'transparent',
+              background:  isActive ? 'var(--surface2)' : 'transparent',
+              borderColor: isActive ? 'var(--border2)'  : 'transparent',
             }}
             onClick={() => setActive(p.key)}
           >
             <span style={{
               ...styles.label,
-              color: isActive ? 'var(--text)' : 'var(--text2)',
+              color:      isActive ? 'var(--text)' : 'var(--text2)',
               fontWeight: isActive ? 600 : 400,
             }}>
               {p.label}
@@ -70,9 +67,11 @@ const styles = {
     border: '1px solid var(--border)',
     borderRadius: 'var(--radius-lg)',
     overflow: 'hidden',
+    flexWrap: 'wrap',
   },
   cell: {
     flex: 1,
+    minWidth: 80,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -88,7 +87,6 @@ const styles = {
   label: {
     fontFamily: 'var(--font-mono)',
     fontSize: '0.68rem',
-    color: 'var(--text2)',
     whiteSpace: 'nowrap',
   },
   value: {
