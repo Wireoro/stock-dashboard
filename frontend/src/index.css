@@ -5,29 +5,35 @@
 }
 
 :root {
-  --bg:        #0a0c0f;
-  --surface:   #111418;
-  --surface2:  #181c22;
-  --border:    #232830;
-  --border2:   #2e3540;
-  --accent:    #00d4a0;
-  --accent2:   #00b389;
-  --red:       #f05252;
-  --green:     #00d4a0;
-  --muted:     #5a6475;
-  --text:      #e2e8f0;
-  --text2:     #94a3b8;
-  --font-sans: 'Syne', sans-serif;
-  --font-mono: 'DM Mono', monospace;
+  /* ── Warm cream palette (from MAIN_copy.html) ── */
+  --bg:        #FAF7F2;
+  --surface:   #FFFFFF;
+  --surface2:  #F5F1EB;
+  --border:    #EDE8E0;
+  --border2:   #DDD5C8;
+  --accent:    #C4654A;   /* terracotta red */
+  --accent2:   #A8523A;   /* darker terracotta */
+  --green:     #6B8F71;
+  --red:       #C4654A;
+  --muted:     #A09688;
+  --text:      #2C2520;
+  --text2:     #8A8178;
+
+  /* ── Typography ── */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+
+  /* ── Shape ── */
   --radius:    8px;
-  --radius-lg: 14px;
+  --radius-lg: 12px;
 }
 
 html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
   font-size: 16px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -47,6 +53,10 @@ input {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* Recharts text override */
+.recharts-text { fill: var(--muted) !important; }
+.recharts-cartesian-grid line { stroke: var(--border) !important; }
