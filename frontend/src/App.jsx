@@ -4,6 +4,7 @@ import QuoteCard from './components/QuoteCard.jsx';
 import StockChart from './components/StockChart.jsx';
 import CompanyProfile from './components/CompanyProfile.jsx';
 import Metrics from './components/Metrics.jsx';
+import Earnings from './components/Earnings.jsx';
 import InsiderSentiment from './components/InsiderSentiment.jsx';
 import GovSpending from './components/GovSpending.jsx';
 import SocialSentiment from './components/SocialSentiment.jsx';
@@ -58,6 +59,7 @@ export default function App() {
         <InsiderSentiment symbol={symbol} />
         <ESGScore         symbol={symbol} />
         <GovSpending      symbol={symbol} companyName={companyName} />
+        <Earnings         symbol={symbol} />
 
       </main>
     </div>
